@@ -214,7 +214,7 @@ const SECTIONS = [
     out:v=>({params:{target_power_dbm:num(v.target)},
       limits:[lim("Power","dBm",add(v.target,v.lo),add(v.target,v.hi),{lsl:num(v.lo),usl:num(v.hi)})]}) },
 
-  { key:"bf", title:"Tx Im BF Calibration", titles:{"2.4G":"TX BF Calibration & Verification"}, desc:"Beamforming 校正", group:"band", stage:"Calibration", path:"Beamforming",
+  { key:"bf", title:"Tx Im BF Calibration", titles:{"2.4G":"TX BF Calibration & Verification"}, noBands:["6G"], desc:"Beamforming 校正", group:"band", stage:"Calibration", path:"Beamforming",
     fields:[
       {k:"target", label:"Target Power", unit:"dBm", req:true},
       {k:"rxp", label:"DUT Rx Power", unit:"dBm", req:true},
@@ -279,7 +279,8 @@ function lim(item,unit,lsl,usl,rel){ const o={item,unit,lsl,usl}; if(rel) o.rela
 
 /* ---------- 狀態 ---------- */
 // 所有頁：每個頻段各一套（頻段測項 + Throughput）
-const PAGES = BAND_KEYS.flatMap(band => SECTIONS.map(s => pidOf(band, s.key)));
+// 範本裡某些頻段沒有的測項（noBands）不開頁
+const PAGES = BAND_KEYS.flatMap(band => SECTIONS.filter(s => !s.noBands?.includes(band)).map(s => pidOf(band, s.key)));
 const pagesIn = band => PAGES.filter(p => bandOf(p) === band);
 const titleOf = pid => secOf(pid).titles?.[bandOf(pid)] ?? secOf(pid).title;
 function blankSec(pid, o={}){
@@ -956,6 +957,7 @@ function legacyDraft(o){
     const key = String(r.id || "").split("-")[1]?.toLowerCase(), band = r.band || o.band;
     if (!BANDS[band]) { notes.push(`網頁目前沒有 ${band} 頁，舊檔裡 ${band} 的測項已略過`); continue; }
     if (!SEC[key]) { notes.push(`有一筆「${r.test || r.id}」認不出是哪個測項，已略過`); continue; }
+    if (!PAGES.includes(pidOf(band, key))) { notes.push(`網頁的 ${band} 沒有「${SEC[key].title}」，舊檔裡這項已略過`); continue; }
     (groups[pidOf(band, key)] ??= []).push(r);
   }
   const sec = {};
@@ -1007,8 +1009,9 @@ $("f-open").onchange = async e => {
     band = BAND_KEYS.find(b => pagesIn(b).some(p => !untouched(p))) || BAND_KEYS[0];
     cur = "overview"; syncMeta(); update(true);
     // 舊版檔案有猜不準的地方、或檔案裡有網頁還沒支援的頻段（例如 6G），才出通知
-    const skipped = legacyOne ? [] : [...new Set(Object.keys(o.draft.sec).map(bandOf).filter(b => !BANDS[b]))]
-      .map(b => `網頁目前沒有 ${b} 頁，檔案裡 ${b} 的測項已略過`);
+    const extra = legacyOne ? [] : Object.keys(o.draft.sec).filter(p => !PAGES.includes(p) && Object.values(o.draft.sec[p]?.bw || {}).some(b => b?.chs?.length));   // 空白的不算
+    const skipped = [...new Set(extra.map(p => !BANDS[bandOf(p)] ? `網頁目前沒有 ${bandOf(p)} 頁，檔案裡 ${bandOf(p)} 的測項已略過`
+      : SEC[p.split("|")[1]] ? `網頁的 ${bandOf(p)} 沒有「${SEC[p.split("|")[1]].title}」，檔案裡這項已略過` : null).filter(Boolean))];
     ui.notice = legacyOne && legacyOne.notes.length ? ["這是舊版網頁下載的檔案，已盡量還原，以下幾點請確認：", ...legacyOne.notes]
       : skipped.length ? ["以下內容沒有載入：", ...skipped] : null;
     renderNotice();
