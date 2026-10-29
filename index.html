@@ -257,9 +257,12 @@ const SECTIONS = [
       {k:"evm", label:"EVM 上限", unit:"dB"},
       {k:"felo", label:"Freq Acc 下限", unit:"ppm"},
       {k:"fehi", label:"Freq Acc 上限", unit:"ppm"},
-      {k:"mask", label:"Spectrum Mask 上限", unit:"%", range:[0,100]}],
-    pairs:[["pwlo","pwhi"],["felo","fehi"]],
-    atLeastOne:["pwlo","pwhi","evm","felo","fehi","mask"],
+      {k:"mask", label:"Spectrum Mask 上限", unit:"%", range:[0,100]},
+      {k:"lol", label:"LO Leakage 上限", unit:"dB"},
+      {k:"sclo", label:"Sym Clk 下限", unit:"ppm"},
+      {k:"schi", label:"Sym Clk 上限", unit:"ppm"}],
+    pairs:[["pwlo","pwhi"],["felo","fehi"],["sclo","schi"]],
+    atLeastOne:["pwlo","pwhi","evm","felo","fehi","mask","lol","sclo","schi"],
     derived:v=>`→ Power ${absRange(v.target,v.pwlo,v.pwhi)} dBm`,
     out:v=>{
       const L=[];
@@ -267,6 +270,8 @@ const SECTIONS = [
       if(v.evm!=="") L.push(lim("EVM","dB",null,num(v.evm)));
       if(v.felo!==""||v.fehi!=="") L.push(lim("Freq Error","ppm",num(v.felo),num(v.fehi)));
       if(v.mask!=="") L.push(lim("Spectrum Mask","%",null,num(v.mask)));
+      if(v.lol!=="") L.push(lim("LO Leakage","dB",null,num(v.lol)));
+      if(v.sclo!==""||v.schi!=="") L.push(lim("Sym Clk Error","ppm",num(v.sclo),num(v.schi)));
       return {params:{target_power_dbm:num(v.target)}, limits:L};
     } },
 
@@ -610,9 +615,11 @@ const XL_SECTIONS = {
          vals:r => [r.params.dut_rx_power_dbm, limOf(r,"Rx Gain Error").lsl, limOf(r,"Rx Gain Error").usl, r.params.record_result ? "Y" : "N"]},
   tx:   {ver:true, specFill:true, title:"Tx Verification (Power, EVM, Frequency accuracy)",
          head:["Target Power (dBm)","Power Accuracy lower (dB)","Power Accuracy upper (dB)","EVM upper (dB)",
-               "Freq Accuracy lower (ppm)","Freq Accuracy upper (ppm)","Spectrum Mask upper (%)"],
+               "Freq Accuracy lower (ppm)","Freq Accuracy upper (ppm)","Spectrum Mask upper (%)",
+               "LO Leakage upper (dB)","Sym Clk Error lower (ppm)","Sym Clk Error upper (ppm)"],
          vals:r => [r.params.target_power_dbm, relOf(r,"Power").lsl, relOf(r,"Power").usl, limOf(r,"EVM").usl,
-                    limOf(r,"Freq Error").lsl, limOf(r,"Freq Error").usl, limOf(r,"Spectrum Mask").usl]},
+                    limOf(r,"Freq Error").lsl, limOf(r,"Freq Error").usl, limOf(r,"Spectrum Mask").usl,
+                    limOf(r,"LO Leakage").usl, limOf(r,"Sym Clk Error").lsl, limOf(r,"Sym Clk Error").usl]},
   per:  {ver:true, title:"Rx PER", head:["Sensitivity (dBm)","PER upper limit (%)"],
          vals:r => [r.params.sensitivity_dbm, limOf(r,"PER").usl]},
   tp:   {ver:true, dir:true, title:"Throughput", head:["RSSI (dBm)","RSSI lower limit (dBm)","RSSI upper limit (dBm)","Throughput lower limit (Mbps)"],
@@ -692,7 +699,7 @@ function specSheet(o){
   return sh;
 }
 function buildXlsx(o){
-  const sheets = [["規格總表", sheetXml(specSheet(o), [3, 13, 13, 11, 10, 7, 11, 40, 18, 18, 18, 18, 18, 18, 18])]];
+  const sheets = [["規格總表", sheetXml(specSheet(o), [3, 13, 13, 11, 10, 7, 11, 40, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18])]];
   const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
   const NS = "http://schemas.openxmlformats.org", REL = `${NS}/officeDocument/2006/relationships`;
   const files = [
@@ -970,7 +977,8 @@ const ROW_TO_FIELDS = {
   bf:   r => ({target:r.params?.target_power_dbm, rxp:r.params?.dut_rx_power_dbm, lo:limOf(r,"iBF Power").lsl, hi:limOf(r,"iBF Power").usl}),
   rxcal:r => ({rxp:r.params?.dut_rx_power_dbm, lo:limOf(r,"Rx Gain Error").lsl, hi:limOf(r,"Rx Gain Error").usl, rec:r.params?.record_result === false ? "N" : "Y"}),
   tx:   r => ({target:r.params?.target_power_dbm, pwlo:relOf(r,"Power").lsl, pwhi:relOf(r,"Power").usl, evm:limOf(r,"EVM").usl,
-               felo:limOf(r,"Freq Error").lsl, fehi:limOf(r,"Freq Error").usl, mask:limOf(r,"Spectrum Mask").usl}),
+               felo:limOf(r,"Freq Error").lsl, fehi:limOf(r,"Freq Error").usl, mask:limOf(r,"Spectrum Mask").usl,
+               lol:limOf(r,"LO Leakage").usl, sclo:limOf(r,"Sym Clk Error").lsl, schi:limOf(r,"Sym Clk Error").usl}),
   per:  r => ({sens:r.params?.sensitivity_dbm, per:limOf(r,"PER").usl}),
   tp:   r => ({rssi:r.params?.rssi_dbm, rlo:limOf(r,"RSSI").lsl, rhi:limOf(r,"RSSI").usl, tput:limOf(r,"Throughput").lsl})
 };
@@ -1056,6 +1064,7 @@ function fillMissing(s){
   for (const pid of Object.keys(s.sec).filter(isGroupId)) {
     s.sec[pid].band = bandOf(pid);
     for (const b of BWS) s.sec[pid].bw[b] ??= {chs:[], ov:{}};
+    for (const f of secOf(pid).fields) s.sec[pid].v[f.k] ??= f.type === "yn" ? "Y" : "";
   }
   return s;
 }
