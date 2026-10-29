@@ -146,7 +146,6 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
     <label>RD 填寫人<input id="m-rd"></label>
     <label>日期<input id="m-date" type="date"></label>
     <label>Revision<input id="m-rev" style="width:64px"></label>
-    <label>改版說明<input id="m-note" style="width:220px" placeholder="例：新增 5G ch149"></label>
   </div>
   <div class="spacer"></div>
   <button class="btn" id="b-open" title="選之前下載的 zip 或 JSON，載入後改版">開啟舊檔</button>
@@ -292,7 +291,7 @@ function today(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 function blankState(){
-  return {meta:{project:"",rd:"",date:today(),rev:"R0A",note:""},
+  return {meta:{project:"",rd:"",date:today(),rev:"R0A"},
           sec:Object.fromEntries(PAGES.map(p=>[p,blankSec(p)]))};
 }
 let state = blankState();
@@ -665,7 +664,7 @@ function buildXlsx(o){
   cv.set(2, 1, "Project:", 9); cv.set(2, 2, o.project || "", 5); cv.set(2, 3, "", 5); cv.merge(2, 2, 2, 3);
   cv.set(3, 1, "Band:", 9); cv.set(3, 2, o.bands.join(" / "), 5); cv.set(3, 3, "", 5); cv.merge(3, 2, 3, 3);
   ["Rev","Date","Change List","Issue by"].forEach((t, j) => cv.set(5, 1 + j, t, 10));
-  [o.revision, o.date, o.change_note, o.rd].forEach((v, j) => cv.set(6, 1 + j, v || "", 5));
+  [o.revision, o.date, "", o.rd].forEach((v, j) => cv.set(6, 1 + j, v || "", 5));
   sheets.push(["Cover", sheetXml(cv, [3, 18, 18, 60, 18])]);
   const w = [3, 30, 14, 10, 13, 18, 9, 9, 9, 9, 15, 15, 15, 15, 15, 15, 15];
   for (const b of BAND_KEYS) {
@@ -723,7 +722,7 @@ function buildOutput(){
     });
   }
   return {schema:"rf-requirement/0.3", project:state.meta.project, revision:state.meta.rev,
-          rd:state.meta.rd, date:state.meta.date, change_note:state.meta.note || "",
+          rd:state.meta.rd, date:state.meta.date,
           bands:BAND_KEYS.filter(b=>out.some(r=>r.band===b)), rows:out,
           draft:{meta:state.meta, sec:state.sec}};   // 表單原始狀態：開啟舊檔時原樣還原（共同規格／例外分得清楚）
 }
@@ -878,11 +877,11 @@ document.addEventListener("click", e => {
 });
 
 $("b-clear").onclick = () => { if (confirm("清空所有內容？")) { state = blankState(); syncMeta(); update(true); } };
-["project","rd","date","rev","note"].forEach(k => $("m-"+k).addEventListener("input", e => {
+["project","rd","date","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
   state.meta[k] = e.target.value; save();
   if (cur === "overview") renderOverview();   // 總覽頁標題跟著更新
 }));
-function syncMeta(){ ["project","rd","date","rev","note"].forEach(k => $("m-"+k).value = state.meta[k] ?? ""); }
+function syncMeta(){ ["project","rd","date","rev"].forEach(k => $("m-"+k).value = state.meta[k] ?? ""); }
 
 /* ---------- 開啟舊檔：選之前下載的 zip 或 JSON，把表單原樣填回來改版 ---------- */
 // 從 zip 裡找出 *_RFreq.json（自己產的 zip 沒壓縮；被 Windows 重新壓過的用瀏覽器內建的解壓）
@@ -929,7 +928,7 @@ function restoreDraft(dr){
     st.sec[pid] = d;
   }
   const m = dr.meta || {};
-  st.meta = {project:String(m.project ?? ""), rd:String(m.rd ?? ""), rev:nextRev(String(m.rev ?? "")), date:today(), note:""};
+  st.meta = {project:String(m.project ?? ""), rd:String(m.rd ?? ""), rev:nextRev(String(m.rev ?? "")), date:today()};
   return {st, oldRev:String(m.rev ?? "")};
 }
 // 舊版檔案（沒有存表單原始狀態）：從測試點清單倒推回表單，猜不準的地方回傳提醒
@@ -949,7 +948,8 @@ function legacyDraft(o){
   const notes = [], groups = {};
   for (const r of o.rows || []) {
     const key = String(r.id || "").split("-")[1]?.toLowerCase(), band = r.band || o.band;
-    if (!SEC[key] || !BANDS[band]) { notes.push(`有一筆「${r.test || r.id}」認不出是哪個測項，已略過`); continue; }
+    if (!BANDS[band]) { notes.push(`網頁目前沒有 ${band} 頁，舊檔裡 ${band} 的測項已略過`); continue; }
+    if (!SEC[key]) { notes.push(`有一筆「${r.test || r.id}」認不出是哪個測項，已略過`); continue; }
     (groups[pidOf(band, key)] ??= []).push(r);
   }
   const sec = {};
@@ -1000,8 +1000,11 @@ $("f-open").onchange = async e => {
     state = st; ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {};
     band = BAND_KEYS.find(b => pagesIn(b).some(p => !untouched(p))) || BAND_KEYS[0];
     cur = "overview"; syncMeta(); update(true);
-    // 只有舊版檔案、有猜不準的地方才出通知
-    ui.notice = legacyOne && legacyOne.notes.length ? ["這是舊版網頁下載的檔案，已盡量還原，以下幾點請確認：", ...legacyOne.notes] : null;
+    // 舊版檔案有猜不準的地方、或檔案裡有網頁還沒支援的頻段（例如 6G），才出通知
+    const skipped = legacyOne ? [] : [...new Set(Object.keys(o.draft.sec).map(bandOf).filter(b => !BANDS[b]))]
+      .map(b => `網頁目前沒有 ${b} 頁，檔案裡 ${b} 的測項已略過`);
+    ui.notice = legacyOne && legacyOne.notes.length ? ["這是舊版網頁下載的檔案，已盡量還原，以下幾點請確認：", ...legacyOne.notes]
+      : skipped.length ? ["以下內容沒有載入：", ...skipped] : null;
     renderNotice();
   } catch (err) { alert("無法開啟：" + err.message); }
 };
