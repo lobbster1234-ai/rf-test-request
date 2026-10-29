@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>RF 測試需求填寫</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#f5f6fa; --card:#fff; --ink:#1d2433; --muted:#6b7385; --line:#e3e6ee; --line2:#eef0f5;
@@ -14,8 +12,8 @@
   --err:#c62f2f; --err-soft:#fdeaea; --soft:#f7f8fc; --warn:#8a5a00; --warn-soft:#fff3d6;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 "Noto Sans TC",system-ui,sans-serif}
-.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 "Microsoft JhengHei","PingFang TC",system-ui,sans-serif}
+.mono{font-family:Consolas,ui-monospace,monospace}
 button{font:inherit}
 
 /* 頂部 */
@@ -52,7 +50,7 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .ic.bad{background:var(--err);color:#fff}
 .item .nm{flex:1;font-size:13px;line-height:1.3}
 .item .nm small{display:block;color:var(--muted);font-size:11px}
-.item .n{font-size:12px;color:var(--muted);font-family:"JetBrains Mono",monospace}
+.item .n{font-size:12px;color:var(--muted);font-family:Consolas,ui-monospace,monospace}
 .bandtabs{display:flex;gap:4px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:6px}
 .bandtabs button{flex:1;border:none;background:none;border-radius:7px;padding:7px 0;font-weight:700;font-size:13px;cursor:pointer;color:var(--muted)}
 .bandtabs button.on{background:var(--accent);color:#fff}
@@ -76,7 +74,7 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .fld input[type=number]{width:84px}
 .checks{display:flex;gap:12px;align-items:center;padding:6px 2px;border:1px solid transparent;border-radius:8px}
 .checks label{display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--ink);cursor:pointer}
-.derived{font-family:"JetBrains Mono",monospace;font-size:13px;background:var(--soft);border-radius:8px;padding:7px 12px;color:#3c4558}
+.derived{font-family:Consolas,ui-monospace,monospace;font-size:13px;background:var(--soft);border-radius:8px;padding:7px 12px;color:#3c4558}
 .err-cell{border-color:var(--err)!important;background:var(--err-soft)!important}
 
 /* 頻道 */
@@ -87,7 +85,7 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .bw-h .arrow{color:var(--muted);font-size:11px;width:10px}
 .bw-name{font-weight:700;width:72px}
 .picked{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:200px}
-.tag{font-family:"JetBrains Mono",monospace;font-size:12px;background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:2px 8px}
+.tag{font-family:Consolas,ui-monospace,monospace;font-size:12px;background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:2px 8px}
 .none{color:var(--muted);font-size:13px}
 .ov-tag{font-size:11px;color:var(--warn);background:var(--warn-soft);border-radius:4px;padding:1px 6px;margin-left:4px}
 .bw-tools{display:flex;gap:14px}
@@ -95,7 +93,7 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{position:relative}
 .chip input{position:absolute;opacity:0;pointer-events:none}
-.chip span{display:inline-block;min-width:44px;text-align:center;font-family:"JetBrains Mono",monospace;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 6px;cursor:pointer;color:var(--muted);user-select:none;line-height:1.25}
+.chip span{display:inline-block;min-width:44px;text-align:center;font-family:Consolas,ui-monospace,monospace;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 6px;cursor:pointer;color:var(--muted);user-select:none;line-height:1.25}
 .chip span small{display:block;font-size:10px;opacity:.75}
 .chip span:hover{border-color:var(--accent)}
 .chip input:checked+span{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -118,10 +116,10 @@ th{font-weight:500;font-size:12px;color:var(--muted);text-align:left;padding:8px
 td{padding:10px;border-bottom:1px solid var(--line2);vertical-align:top}
 td .sm{font-size:12px;color:var(--muted)}
 td.nw,th.nw{white-space:nowrap}
-.chline{display:flex;gap:8px;white-space:nowrap;font-family:"JetBrains Mono",monospace;font-size:12px}
+.chline{display:flex;gap:8px;white-space:nowrap;font-family:Consolas,ui-monospace,monospace;font-size:12px}
 .chline b{width:40px;font-weight:600;color:var(--muted)}
 .tbl-wrap{overflow-x:auto}
-.detail td,.detail th{font-family:"JetBrains Mono",monospace;font-size:12px;padding:5px 8px;white-space:nowrap}
+.detail td,.detail th{font-family:Consolas,ui-monospace,monospace;font-size:12px;padding:5px 8px;white-space:nowrap}
 .detail td.o{color:var(--warn);font-weight:600}
 details summary{cursor:pointer;color:var(--accent);font-size:13px}
 .exp{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:14px}
