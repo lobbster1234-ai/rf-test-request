@@ -123,13 +123,10 @@ td.nw,th.nw{white-space:nowrap}
 .detail td,.detail th{font-family:"JetBrains Mono",monospace;font-size:12px;padding:5px 8px;white-space:nowrap}
 .detail td.o{color:var(--warn);font-weight:600}
 details summary{cursor:pointer;color:var(--accent);font-size:13px}
-.code{background:#141a26;color:#d6deeb;border-radius:10px;padding:14px;font-size:12px;max-height:480px;overflow:auto;white-space:pre;margin-top:10px}
 .exp{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:14px}
 .exp-card{border:1px solid var(--line);border-radius:10px;padding:14px}
 .exp-card h4{margin:0 0 2px;font-size:14px}
 .exp-card .sm{font-size:12px;color:var(--muted);margin-bottom:10px}
-.notes{margin:10px 0 0;padding-left:18px;font-size:12px;color:var(--warn)}
-.notes li{margin-bottom:3px}
 .errlist{margin:0;padding-left:18px;font-size:13px;color:var(--err)}
 </style>
 </head>
@@ -471,26 +468,30 @@ function renderOverview(){
     <div class="step"><div class="tbl-wrap"><table>
       <thead><tr><th>測項</th><th class="nw">條件</th><th>規格</th><th class="nw">頻道</th><th class="nw">點數</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <div class="step">
-      <div class="sm" style="color:var(--muted)">下載的壓縮檔解開是資料夾 <b class="mono">${esc(packName())}</b>，裡面有 JSON 和該儀器的測項檔</div>
-      <div class="exp">${EXPORTERS.map(x=>{ const r = x.conv(o); return `<div class="exp-card">
+      <div class="sm" style="color:var(--muted)">下載的壓縮檔解開是資料夾 <b class="mono">${esc(packName())}</b>，裡面有 JSON、該儀器的測項檔和給 MT 的提醒</div>
+      <div class="exp">${EXPORTERS.map(x=>`<div class="exp-card">
         <h4>${x.name}</h4><div class="sm">${x.desc}</div>
-        <button class="btn primary" data-exp="${x.key}">下載（${x.file}＋JSON）</button>
-        ${r.notes.length?`<ul class="notes">${r.notes.map(n=>`<li>${n}</li>`).join("")}</ul>`:""}</div>`; }).join("")}</div>
+        <button class="btn primary" data-exp="${x.key}">下載（${x.file}＋JSON）</button></div>`).join("")}</div>
       <details style="margin-top:14px"><summary>逐點明細</summary><div class="tbl-wrap" style="margin-top:8px">${detailTables()}</div></details>
-      <details style="margin-top:10px"><summary>JSON 預覽</summary><div class="code mono">${esc(JSON.stringify(o, null, 2))}</div></details>
-      ${EXPORTERS.map(x=>`<details style="margin-top:10px"><summary>${x.file} 預覽</summary><div class="code mono">${esc(x.conv(o).text)}</div></details>`).join("")}
     </div>`;
   const okToGo = () => !errs.length || confirm(`還有 ${errs.length} 個問題，仍要下載？`);
-  // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）
+  // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）＋給 MT 的提醒
   $("main").querySelectorAll("[data-exp]").forEach(b => b.onclick = () => {
     if (!okToGo()) return;
-    const x = EXPORTERS.find(e => e.key === b.dataset.exp), name = packName();
+    const x = EXPORTERS.find(e => e.key === b.dataset.exp), name = packName(), r = x.conv(o);
     const zip = makeZip([
       {name:`${name}/`, data:""},
       {name:`${name}/${name}_RFreq.json`, data:JSON.stringify(o,null,2)},
-      {name:`${name}/${x.file}`, data:x.conv(o).text}]);
+      {name:`${name}/${x.file}`, data:r.text},
+      {name:`${name}/給MT的提醒.txt`, data:mtNotes(o, x, r.notes)}]);
     download(`${name}.zip`, zip, "application/zip");
   });
+}
+// 給 MT 的提醒：這份測項檔沒包含、或要另外處理的東西（RD 畫面上不顯示）
+function mtNotes(o, x, notes){
+  return [`RF 測試需求：${[o.project, o.revision, o.rd, o.date].filter(Boolean).join(" / ")}`,
+    `儀器：${x.name}（${x.file}）`, "",
+    ...(notes.length ? notes.map((n,i) => `${i+1}. ${n}`) : ["沒有需要另外處理的項目。"])].join(CRLF) + CRLF;
 }
 // 資料夾名：Project_Revision_姓名；空白用「未填」，去掉檔名不能用的字元
 function packName(){
