@@ -43,7 +43,17 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .side-t:first-child{margin-top:0}
 .item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:10px;padding:9px 12px;cursor:pointer;color:var(--ink)}
 .item:hover{background:var(--card)}
-.item.sub{padding-left:30px}
+.grp-box{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;background:var(--card);padding:4px 4px 4px 6px;margin:2px 0}
+.grp-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:6px 8px 2px}
+.grp-head .cnt{font-size:11px;font-weight:500;color:#fff;background:var(--accent);border-radius:999px;padding:1px 8px}
+.item.sub{padding:7px 8px;border-radius:8px}
+.item.sub.on{background:var(--accent-soft);border-color:transparent;box-shadow:none}
+.gno{font-weight:600;margin-right:6px}
+.mtag{font-family:Consolas,ui-monospace,monospace;font-size:11px;background:var(--accent-soft);color:var(--accent);border-radius:4px;padding:1px 6px;margin-right:4px}
+.item.sub.on .mtag{background:#fff}
+.newtag{font-size:11px;color:var(--warn);background:var(--warn-soft);border-radius:4px;padding:1px 6px}
+.item.new{animation:grpflash 1.8s ease-out}
+@keyframes grpflash{0%,40%{background:var(--warn-soft)}100%{background:transparent}}
 .item.on{background:var(--card);border-color:var(--line);box-shadow:0 1px 3px rgba(20,30,60,.06)}
 .item .ic{width:20px;height:20px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700}
 .ic.todo{border:2px solid var(--line);}
@@ -119,7 +129,7 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 @media (max-width:820px){.picker,.ov{margin-left:0}}
 
 .pager{display:flex;justify-content:space-between;margin-top:18px}
-.grp-tools{display:flex;gap:16px;margin-top:6px}
+.grp-tools{display:flex;gap:18px;justify-content:flex-end;margin-top:12px}
 .link.danger{color:var(--err)}
 
 
@@ -394,11 +404,19 @@ function renderNotice(){
 function renderSide(){
   const groups = [[`${band} 測項`,"band"],["Throughput 工作表","Throughput"]];
   const item = pid => {
+    // 有多組條件的測項：第 1 組負責畫外框（標題＋「N 組條件」），每組一列標出 Mode／Rate；第 2 組起不另外畫
+    if (groupsOf(pid).length > 1) return pid !== baseOf(pid) ? "" : `<div class="grp-box"><div class="grp-head">${titleOf(pid)}<span class="cnt">${groupsOf(pid).length} 組條件</span></div>
+      ${groupsOf(pid).map(groupItem).join("")}</div>`;
     const s = secOf(pid), n = pointsOf(pid).length, e = validate(pid).errs.length, u = untouched(pid);
-    const ic = u ? `<span class="ic todo"></span>` : e ? `<span class="ic bad">!</span>` : `<span class="ic ok">✓</span>`;
-    return `<button class="item${cur===pid?" on":""}${pid !== baseOf(pid) ? " sub" : ""}" data-go="${pid}">${ic}
-      <span class="nm">${pid !== baseOf(pid) ? `第 ${groupNo(pid)} 組 · ${esc(state.sec[pid].mode)} ${esc(state.sec[pid].rate)}` : pageName(pid)}<small>${u?"未填（不測）":e?`${e} 個問題`:s.desc}</small></span>
+    return `<button class="item${cur===pid?" on":""}" data-go="${pid}">${statusIc(pid)}
+      <span class="nm">${titleOf(pid)}<small>${u?"未填（不測）":e?`${e} 個問題`:s.desc}</small></span>
       <span class="n">${u?"":n}</span></button>`;
+  };
+  const statusIc = pid => untouched(pid) ? `<span class="ic todo"></span>` : validate(pid).errs.length ? `<span class="ic bad">!</span>` : `<span class="ic ok">✓</span>`;
+  const groupItem = pid => {
+    const n = pointsOf(pid).length, e = validate(pid).errs.length, u = untouched(pid), d = state.sec[pid];
+    return `<button class="item sub${cur===pid?" on":""}${ui.justAdded === pid ? " new" : ""}" data-go="${pid}">${statusIc(pid)}
+      <span class="nm"><span class="gno">第 ${groupNo(pid)} 組</span><span class="mtag">${esc(d.mode)}</span><span class="mtag">${esc(d.rate)}</span>${ui.justAdded === pid ? `<span class="newtag">新增</span>` : ""}<small>${u ? "未填" : e ? `${e} 個問題` : `${n} 個測試點`}</small></span></button>`;
   };
   const cnt = b => pagesIn(b).reduce((a,p)=>a+pointsOf(p).length,0);
   const tabs = `<div class="bandtabs">${BAND_KEYS.map(b=>`<button data-band="${b}" class="${b===band?"on":""}">${b}<small>${cnt(b)||""}</small></button>`).join("")}</div>`;
@@ -426,8 +444,7 @@ function renderMain(){
   const pid = cur, s = secOf(pid), d = state.sec[pid];
   const list = pagesIn(band), idx = list.indexOf(pid), prev = list[idx-1], next = list[idx+1];
   $("main").innerHTML = `
-    <div class="page-h"><h2>${titleOf(pid)}<span class="tag" style="margin-left:8px;vertical-align:middle">${d.band}</span>${groupsOf(pid).length > 1 ? `<span class="tag" style="margin-left:6px;vertical-align:middle">第 ${groupNo(pid)} 組</span>` : ""}</h2><p>${s.desc}</p>
-      <div class="grp-tools"><button class="link" data-addgroup title="同一個測項要用不同的 Mode／Rate／NSS／Chain 時，新增一組">＋ 新增一組條件（不同 Mode／Rate）</button>${pid !== baseOf(pid) ? `<button class="link danger" data-delgroup>刪除這一組</button>` : ""}</div></div>
+    <div class="page-h"><h2>${titleOf(pid)}<span class="tag" style="margin-left:8px;vertical-align:middle">${d.band}</span>${groupsOf(pid).length > 1 ? `<span class="tag" style="margin-left:6px;vertical-align:middle">第 ${groupNo(pid)} 組</span>` : ""}</h2><p>${s.desc}</p></div>
 
     <div class="step"><div class="step-t"><span class="no">1</span><h3>測試條件</h3></div>
       <div class="fields">
@@ -436,7 +453,8 @@ function renderMain(){
         <label class="fld">Rate<span class="in"><select data-k="rate">${opts(rateList(pid,d.mode),d.rate)}</select></span></label>
         <label class="fld">NSS<span class="in"><select data-k="nss"${nssOn(d)?"":" disabled"}>${nssOn(d)?opts([1,2,3,4],d.nss):"<option>—</option>"}</select></span></label>
         <label class="fld">Chain<span class="checks" data-k="chains">${d.chains.map((c,j)=>`<label><input type="checkbox" data-chain="${j}"${c?" checked":""}>${j}</label>`).join("")}</span></label>
-      </div></div>
+      </div>
+      <div class="grp-tools">${pid !== baseOf(pid) ? `<button class="link danger" data-delgroup>刪除這一組</button>` : ""}<button class="link" data-addgroup title="同一個測項要用不同的 Mode／Rate／NSS／Chain 時，新增一組">＋ 新增一組條件（不同 Mode／Rate）</button></div></div>
 
     <div class="step"><div class="step-t"><span class="no">2</span><h3>規格</h3>${s.specHint?`<span class="hint">${s.specHint}</span>`:""}</div>
       <div class="fields">
@@ -894,6 +912,7 @@ document.addEventListener("click", e => {
     const b = baseOf(cur), n = Math.max(1, ...Object.keys(state.sec).filter(k => baseOf(k) === b && k !== b).map(k => Number(k.split("|")[2]))) + 1;
     const id = `${b}|${n}`;
     state.sec[id] = blankSec(id); refreshPages(); cur = id;
+    ui.justAdded = id; setTimeout(() => { if (ui.justAdded === id) { ui.justAdded = null; renderSide(); } }, 4000);
     window.scrollTo({top:0}); return update(true);
   }
   if (t.hasAttribute("data-delgroup")) {
