@@ -34,10 +34,10 @@ header.top h1{font-size:17px;margin:0}
 
 /* 版面 */
 .layout{display:grid;grid-template-columns:260px 1fr;gap:24px;max-width:1200px;margin:0 auto;padding:24px}
-@media (max-width:820px){.layout{grid-template-columns:1fr;padding:16px}}
+@media (max-width:820px){.layout{grid-template-columns:1fr;padding:16px} body nav.side{position:static}}
 
 /* 左側清單 */
-nav.side{position:sticky;top:84px;align-self:start;display:flex;flex-direction:column;gap:4px}
+nav.side{position:sticky;top:calc(var(--hdr, 69px) + 12px);align-self:start;display:flex;flex-direction:column;gap:4px}
 nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會一直貼在旁邊 */
 .side-t{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.05em;margin:12px 10px 4px}
 .side-t:first-child{margin-top:0}
@@ -504,6 +504,7 @@ function renderOverview(){
   const okToGo = () => !errs.length || confirm(`還有 ${errs.length} 個問題，仍要下載？`);
   // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）＋需求表＋給 MT 的提醒
   $("main").querySelectorAll("[data-exp]").forEach(b => b.onclick = () => {
+    if (!o.rows.length) return alert("還沒有選任何頻道，沒有東西可以下載");
     if (!okToGo()) return;
     const x = EXPORTERS.find(e => e.key === b.dataset.exp), name = packName(), r = x.conv(o);
     const zip = makeZip([
@@ -881,7 +882,7 @@ document.addEventListener("click", e => {
   update(true);
 });
 
-$("b-clear").onclick = () => { if (confirm("清空所有內容？")) { state = blankState(); syncMeta(); update(true); } };
+$("b-clear").onclick = () => { if (confirm("清空所有內容？")) { state = blankState(); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
 ["project","rd","date","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
   state.meta[k] = e.target.value; save();
   if (cur === "overview") renderOverview();   // 總覽頁標題跟著更新
@@ -1040,7 +1041,9 @@ function load(){
 
 state = load() || blankState();
 state.meta.date = today();   // 每次打開都帶當天日期（草稿裡存的是上次的日期）
-syncMeta(); renderSide(); renderMain();
+const setHdr = () => document.documentElement.style.setProperty("--hdr", document.querySelector("header.top").offsetHeight + "px");
+window.addEventListener("resize", setHdr);
+syncMeta(); renderSide(); renderMain(); setHdr();
 </script>
 </body>
 </html>
