@@ -137,8 +137,11 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
     <label>RD 填寫人<input id="m-rd"></label>
     <label>日期<input id="m-date" type="date"></label>
     <label>Revision<input id="m-rev" style="width:64px"></label>
+    <label>改版說明<input id="m-note" style="width:220px" placeholder="例：新增 5G ch149"></label>
   </div>
   <div class="spacer"></div>
+  <button class="btn" id="b-open" title="選之前下載的 zip 或 JSON，載入後改版">開啟舊檔</button>
+  <input type="file" id="f-open" accept=".zip,.json" hidden>
   <button class="btn ghost" id="b-clear">清空</button>
 </header>
 
@@ -279,7 +282,7 @@ function today(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 function blankState(){
-  return {meta:{project:"",rd:"",date:today(),rev:"R0A"},
+  return {meta:{project:"",rd:"",date:today(),rev:"R0A",note:""},
           sec:Object.fromEntries(PAGES.map(p=>[p,blankSec(p)]))};
 }
 let state = blankState();
@@ -644,7 +647,7 @@ function buildXlsx(o){
   cv.set(2, 1, "Project:", 9); cv.set(2, 2, o.project || "", 5); cv.set(2, 3, "", 5); cv.merge(2, 2, 2, 3);
   cv.set(3, 1, "Band:", 9); cv.set(3, 2, o.bands.join(" / "), 5); cv.set(3, 3, "", 5); cv.merge(3, 2, 3, 3);
   ["Rev","Date","Change List","Issue by"].forEach((t, j) => cv.set(5, 1 + j, t, 10));
-  [o.revision, o.date, "", o.rd].forEach((v, j) => cv.set(6, 1 + j, v || "", 5));
+  [o.revision, o.date, o.change_note, o.rd].forEach((v, j) => cv.set(6, 1 + j, v || "", 5));
   sheets.push(["Cover", sheetXml(cv, [3, 18, 18, 60, 18])]);
   const w = [3, 30, 14, 10, 13, 18, 9, 9, 9, 9, 15, 15, 15, 15, 15, 15, 15];
   for (const b of BAND_KEYS) {
@@ -701,8 +704,10 @@ function buildOutput(){
       });
     });
   }
-  return {schema:"rf-requirement/0.2", project:state.meta.project, revision:state.meta.rev,
-          rd:state.meta.rd, date:state.meta.date, bands:BAND_KEYS.filter(b=>out.some(r=>r.band===b)), rows:out};
+  return {schema:"rf-requirement/0.3", project:state.meta.project, revision:state.meta.rev,
+          rd:state.meta.rd, date:state.meta.date, change_note:state.meta.note || "",
+          bands:BAND_KEYS.filter(b=>out.some(r=>r.band===b)), rows:out,
+          draft:{meta:state.meta, sec:state.sec}};   // 表單原始狀態：開啟舊檔時原樣還原（共同規格／例外分得清楚）
 }
 
 /* ---------- 轉成儀器的 test flow（格式由儀器商固定，照儀器商範例檔） ----------
@@ -855,11 +860,77 @@ document.addEventListener("click", e => {
 });
 
 $("b-clear").onclick = () => { if (confirm("清空所有內容？")) { state = blankState(); syncMeta(); update(true); } };
-["project","rd","date","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
+["project","rd","date","rev","note"].forEach(k => $("m-"+k).addEventListener("input", e => {
   state.meta[k] = e.target.value; save();
   if (cur === "overview") renderOverview();   // 總覽頁標題跟著更新
 }));
-function syncMeta(){ ["project","rd","date","rev"].forEach(k => $("m-"+k).value = state.meta[k]); }
+function syncMeta(){ ["project","rd","date","rev","note"].forEach(k => $("m-"+k).value = state.meta[k] ?? ""); }
+
+/* ---------- 開啟舊檔：選之前下載的 zip 或 JSON，把表單原樣填回來改版 ---------- */
+// 從 zip 裡找出 *_RFreq.json（自己產的 zip 沒壓縮；被 Windows 重新壓過的用瀏覽器內建的解壓）
+async function jsonFromZip(buf){
+  const u = new Uint8Array(buf), v = new DataView(buf);
+  let e = u.length - 22;
+  while (e >= 0 && v.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error("壓縮檔格式不正確");
+  let p = v.getUint32(e + 16, true);
+  for (let n = v.getUint16(e + 10, true); n > 0; n--) {
+    const method = v.getUint16(p + 10, true), size = v.getUint32(p + 20, true), nl = v.getUint16(p + 28, true);
+    const extra = v.getUint16(p + 30, true), cmt = v.getUint16(p + 32, true), off = v.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(u.subarray(p + 46, p + 46 + nl));
+    if (/_RFreq\.json$/.test(name)) {
+      const start = off + 30 + v.getUint16(off + 26, true) + v.getUint16(off + 28, true), data = u.subarray(start, start + size);
+      if (method === 0) return new TextDecoder().decode(data);
+      if (method === 8) return await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+      throw new Error("壓縮檔的壓縮方式不支援，請先解壓縮再選裡面的 JSON");
+    }
+    p += 46 + nl + extra + cmt;
+  }
+  throw new Error("壓縮檔裡找不到 _RFreq.json");
+}
+// R0A → R0B；最後一碼不是 A～Y 就維持原樣讓 RD 自己改
+const nextRev = r => /^(.*?)([A-Y])$/.test(r || "") ? r.slice(0, -1) + String.fromCharCode(r.charCodeAt(r.length - 1) + 1) : (r || "");
+// 檔案裡的表單狀態逐欄檢查後才放回來（只收認得的欄位、合法的 Mode／Rate／頻道）
+function restoreDraft(dr){
+  const st = blankState();
+  for (const pid of PAGES) {
+    const x = dr.sec?.[pid]; if (!x) continue;
+    const band = bandOf(pid), modes = BANDS[band].modes;
+    const mode = modes[x.mode] ? x.mode : "EHT";
+    const chs = {}, ov = {};
+    for (const b of BWS) {
+      const ok = BANDS[band].ch[b] || [];
+      chs[b] = (x.bw?.[b]?.chs || []).map(Number).filter(c => ok.includes(c));
+      ov[b] = Object.fromEntries(Object.entries(x.bw?.[b]?.ov || {}).filter(([k]) => secOf(pid).fields.some(f => f.k === k)).map(([k, val]) => [k, String(val ?? "")]));
+    }
+    const v = Object.fromEntries(Object.entries(x.v || {}).filter(([k]) => secOf(pid).fields.some(f => f.k === k)).map(([k, val]) => [k, String(val ?? "")]));
+    const d = blankSec(pid, {mode, rate:x.rate, nss:[1,2,3,4].includes(Number(x.nss)) ? Number(x.nss) : 1,
+      chains:Array.isArray(x.chains) && x.chains.length === 4 ? x.chains.map(Boolean) : undefined,
+      dirs:x.dirs ? {TX:!!x.dirs.TX, RX:!!x.dirs.RX} : undefined, v, chs, ov});
+    if (!rateList(pid, d.mode).includes(d.rate)) d.rate = rateList(pid, d.mode)[0];
+    st.sec[pid] = d;
+  }
+  const m = dr.meta || {};
+  st.meta = {project:String(m.project ?? ""), rd:String(m.rd ?? ""), rev:nextRev(String(m.rev ?? "")), date:today(), note:""};
+  return {st, oldRev:String(m.rev ?? "")};
+}
+$("b-open").onclick = () => $("f-open").click();
+$("f-open").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const buf = await f.arrayBuffer(), head = new Uint8Array(buf, 0, 2);
+    const text = head[0] === 0x50 && head[1] === 0x4b ? await jsonFromZip(buf) : new TextDecoder().decode(buf);
+    const o = JSON.parse(text);
+    if (!String(o.schema || "").startsWith("rf-requirement/") || !o.draft?.sec) throw new Error("這不是這個網頁下載的需求檔，或是太舊的版本");
+    const busy = state.meta.project || PAGES.some(p => !untouched(p));
+    if (busy && !confirm("畫面上已經有填寫的內容，開啟舊檔會覆蓋掉，確定嗎？")) return;
+    const {st, oldRev} = restoreDraft(o.draft);
+    state = st; ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {};
+    band = BAND_KEYS.find(b => pagesIn(b).some(p => !untouched(p))) || BAND_KEYS[0];
+    cur = "overview"; syncMeta(); update(true);
+    alert(`已開啟 ${st.meta.project || "舊檔"} ${oldRev}。\n版次已改成 ${st.meta.rev || "（請自行填寫）"}、日期改成今天，請在「改版說明」寫下這次改了什麼。`);
+  } catch (err) { alert("無法開啟：" + err.message); }
+};
 
 /* ---------- 草稿暫存（只存在這台電腦的瀏覽器） ---------- */
 const KEY = "rf-req-draft-B-v2", OLD_KEY = "rf-req-5g-draft-B-v1";
