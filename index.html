@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>RF 測試需求填寫</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f6fa; --card:#fff; --ink:#1d2433; --muted:#6b7385; --line:#e3e6ee; --line2:#eef0f5;
+  --accent:#3b4fd8; --accent-soft:#eceffd; --ok:#1f8a4c; --ok-soft:#e5f5ec;
+  --err:#c62f2f; --err-soft:#fdeaea; --soft:#f7f8fc; --warn:#8a5a00; --warn-soft:#fff3d6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 "Noto Sans TC",system-ui,sans-serif}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+button{font:inherit}
+
+/* 頂部 */
+header.top{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:1px solid var(--line);padding:10px 24px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+header.top h1{font-size:17px;margin:0}
+.band{background:var(--accent);color:#fff;border-radius:6px;padding:1px 10px;font-weight:700;font-size:13px}
+.meta{display:flex;gap:10px;flex-wrap:wrap}
+.meta label{display:flex;flex-direction:column;font-size:11px;color:var(--muted)}
+.meta input{font:inherit;font-size:13px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;width:150px}
+.spacer{flex:1}
+.btn{font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 14px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.1);color:#fff}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.link{border:none;background:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0}
+.link:hover{text-decoration:underline}
+
+/* 版面 */
+.layout{display:grid;grid-template-columns:260px 1fr;gap:24px;max-width:1200px;margin:0 auto;padding:24px}
+@media (max-width:820px){.layout{grid-template-columns:1fr;padding:16px}}
+
+/* 左側清單 */
+nav.side{position:sticky;top:84px;align-self:start;display:flex;flex-direction:column;gap:4px}
+.side-t{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.05em;margin:12px 10px 4px}
+.side-t:first-child{margin-top:0}
+.item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:10px;padding:9px 12px;cursor:pointer;color:var(--ink)}
+.item:hover{background:var(--card)}
+.item.on{background:var(--card);border-color:var(--line);box-shadow:0 1px 3px rgba(20,30,60,.06)}
+.item .ic{width:20px;height:20px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700}
+.ic.todo{border:2px solid var(--line);}
+.ic.ok{background:var(--ok);color:#fff}
+.ic.bad{background:var(--err);color:#fff}
+.item .nm{flex:1;font-size:13px;line-height:1.3}
+.item .nm small{display:block;color:var(--muted);font-size:11px}
+.item .n{font-size:12px;color:var(--muted);font-family:"JetBrains Mono",monospace}
+.bandtabs{display:flex;gap:4px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:6px}
+.bandtabs button{flex:1;border:none;background:none;border-radius:7px;padding:7px 0;font-weight:700;font-size:13px;cursor:pointer;color:var(--muted)}
+.bandtabs button.on{background:var(--accent);color:#fff}
+.bandtabs button small{font-weight:400;font-size:11px;margin-left:4px;opacity:.85}
+.side-total{margin-top:10px;padding:10px 12px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+
+/* 主區 */
+.page-h{margin-bottom:18px}
+.page-h h2{font-size:22px;margin:0}
+.page-h p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 22px;margin-bottom:14px}
+.step-t{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.step-t .no{width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:12px;font-weight:700}
+.step-t h3{font-size:15px;margin:0}
+.step-t .hint{color:var(--muted);font-size:12px}
+.fields{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end}
+.fld{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.fld .in{display:flex;align-items:center;gap:5px}
+.fld .u{font-size:12px;color:var(--muted)}
+.fld select,.fld input[type=number]{font:inherit;font-size:14px;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#fff}
+.fld input[type=number]{width:84px}
+.checks{display:flex;gap:12px;align-items:center;padding:6px 2px;border:1px solid transparent;border-radius:8px}
+.checks label{display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--ink);cursor:pointer}
+.derived{font-family:"JetBrains Mono",monospace;font-size:13px;background:var(--soft);border-radius:8px;padding:7px 12px;color:#3c4558}
+.err-cell{border-color:var(--err)!important;background:var(--err-soft)!important}
+
+/* 頻道 */
+.bw{border-top:1px solid var(--line2);padding:12px 0}
+.bw:first-of-type{border-top:none;padding-top:0}
+.bw-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap;cursor:pointer;border-radius:8px;margin:0 -10px;padding:6px 10px}
+.bw-h:hover{background:var(--soft)}
+.bw-h .arrow{color:var(--muted);font-size:11px;width:10px}
+.bw-name{font-weight:700;width:72px}
+.picked{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:200px}
+.tag{font-family:"JetBrains Mono",monospace;font-size:12px;background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:2px 8px}
+.none{color:var(--muted);font-size:13px}
+.ov-tag{font-size:11px;color:var(--warn);background:var(--warn-soft);border-radius:4px;padding:1px 6px;margin-left:4px}
+.bw-tools{display:flex;gap:14px}
+.picker{margin:10px 0 0 106px;padding:12px;background:var(--soft);border-radius:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{position:relative}
+.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip span{display:inline-block;min-width:44px;text-align:center;font-family:"JetBrains Mono",monospace;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 6px;cursor:pointer;color:var(--muted);user-select:none;line-height:1.25}
+.chip span small{display:block;font-size:10px;opacity:.75}
+.chip span:hover{border-color:var(--accent)}
+.chip input:checked+span{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip input:focus-visible+span{outline:2px solid var(--accent);outline-offset:1px}
+.hidden-note{font-size:13px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:8px 8px 8px 12px;margin-bottom:10px;display:flex;align-items:flex-start;gap:8px}
+.hidden-note span{flex:1}
+.hidden-note .x{border:none;background:none;color:var(--warn);font-size:18px;line-height:1;cursor:pointer;padding:0 4px;border-radius:4px}
+.hidden-note .x:hover{background:rgba(138,90,0,.12)}
+.picker-f{display:flex;gap:14px;margin-top:10px;font-size:12px}
+.ov{margin:10px 0 0 106px;padding:12px;background:var(--warn-soft);border-radius:10px}
+.ov .hint{font-size:12px;color:var(--warn);margin-bottom:8px}
+@media (max-width:820px){.picker,.ov{margin-left:0}}
+
+.pager{display:flex;justify-content:space-between;margin-top:18px}
+
+
+/* 總覽 */
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font-weight:500;font-size:12px;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line2);vertical-align:top}
+td .sm{font-size:12px;color:var(--muted)}
+td.nw,th.nw{white-space:nowrap}
+.chline{display:flex;gap:8px;white-space:nowrap;font-family:"JetBrains Mono",monospace;font-size:12px}
+.chline b{width:40px;font-weight:600;color:var(--muted)}
+.tbl-wrap{overflow-x:auto}
+.detail td,.detail th{font-family:"JetBrains Mono",monospace;font-size:12px;padding:5px 8px;white-space:nowrap}
+.detail td.o{color:var(--warn);font-weight:600}
+details summary{cursor:pointer;color:var(--accent);font-size:13px}
+.code{background:#141a26;color:#d6deeb;border-radius:10px;padding:14px;font-size:12px;max-height:480px;overflow:auto;white-space:pre;margin-top:10px}
+.exp{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:14px}
+.exp-card{border:1px solid var(--line);border-radius:10px;padding:14px}
+.exp-card h4{margin:0 0 2px;font-size:14px}
+.exp-card .sm{font-size:12px;color:var(--muted);margin-bottom:10px}
+.notes{margin:10px 0 0;padding-left:18px;font-size:12px;color:var(--warn)}
+.notes li{margin-bottom:3px}
+.errlist{margin:0;padding-left:18px;font-size:13px;color:var(--err)}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>RF 測試需求填寫</h1><span class="band" id="h-band"></span>
+  <div class="meta">
+    <label>Project<input id="m-project" placeholder="專案編號"></label>
+    <label>RD 填寫人<input id="m-rd"></label>
+    <label>日期<input id="m-date" type="date"></label>
+    <label>Revision<input id="m-rev" style="width:64px"></label>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn ghost" id="b-clear">清空</button>
+</header>
+
+<div class="layout">
+  <nav class="side" id="side"></nav>
+  <main id="main"></main>
+</div>
+
+<script>
+/* ---------- 規範資料 ---------- */
+const BWS = [20,40,80,160];
+const OFDM = ["6M","9M","12M","18M","24M","36M","48M","54M"];
+const MODES = {
+  "11b":{rates:["1M","2M","5.5M","11M"], nss:false},
+  "11g":{rates:OFDM, nss:false},
+  "11a":{rates:OFDM, nss:false},
+  "HT": {rates:mcs(7),  nss:true},
+  "VHT":{rates:mcs(9),  nss:true},
+  "HE": {rates:mcs(11), nss:true},
+  "EHT":{rates:mcs(13), nss:true}
+};
+function mcs(n){return Array.from({length:n+1},(_,i)=>"MCS"+i)}
+// 各頻段：頻道（依頻寬）、頻率公式、可用 Mode 與各 Mode 支援的頻寬
+// 2.4G 頻道 14（2484，只有 11b 能用）範本沒有，先不列
+const BANDS = {
+  "2.4G":{
+    ch:{20:[1,2,3,4,5,6,7,8,9,10,11,12,13], 40:[3,4,5,6,7,8,9,10,11]},
+    freq:ch => 2407 + ch * 5,
+    modes:{"11b":[20], "11g":[20], HT:[20,40], VHT:[20,40], HE:[20,40], EHT:[20,40]}},
+  "5G":{
+    ch:{20:[36,40,44,48,52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,144,149,153,157,161,165],
+        40:[38,46,54,62,102,110,118,126,134,142,151,159],
+        80:[42,58,106,122,138,155],
+        160:[50,114]},
+    freq:ch => 5000 + ch * 5,
+    modes:{"11a":[20], HT:[20,40], VHT:[20,40,80,160], HE:[20,40,80,160], EHT:[20,40,80,160]}}
+};
+const BAND_KEYS = Object.keys(BANDS);
+// 每一頁 = 頻段 × 測項，id 寫成 "5G|cal"
+const pidOf = (band, key) => `${band}|${key}`;
+const bandOf = pid => pid.split("|")[0];
+const secOf = pid => SEC[pid.split("|")[1]];
+const freqOf = (band, ch) => BANDS[band].freq(ch);
+const bwsOf = (band, mode) => BANDS[band].modes[mode];
+const num = v => (v === "" || v == null) ? null : Number(v);
+
+/* ---------- 測項定義（以 NEW 版範本為準：2.4G／5G 頁各 5 塊 + Throughput 工作表） ---------- */
+const SECTIONS = [
+  { key:"cal", title:"Calibrate Power", desc:"發射功率校正", group:"band", stage:"Calibration", path:"Tx",
+    fields:[
+      {k:"target", label:"Target Power", unit:"dBm", req:true},
+      {k:"lo", label:"誤差下限", unit:"dB", req:true},
+      {k:"hi", label:"誤差上限", unit:"dB", req:true}],
+    pairs:[["lo","hi"]],
+    derived:v=>`→ Power ${absRange(v.target,v.lo,v.hi)} dBm`,
+    out:v=>({params:{target_power_dbm:num(v.target)},
+      limits:[lim("Power","dBm",add(v.target,v.lo),add(v.target,v.hi),{lsl:num(v.lo),usl:num(v.hi)})]}) },
+
+  { key:"bf", title:"Tx Im BF Calibration", titles:{"2.4G":"TX BF Calibration & Verification"}, desc:"Beamforming 校正", group:"band", stage:"Calibration", path:"Beamforming",
+    fields:[
+      {k:"target", label:"Target Power", unit:"dBm", req:true},
+      {k:"rxp", label:"DUT Rx Power", unit:"dBm", req:true},
+      {k:"lo", label:"Pass 下限", unit:"dBm", req:true},
+      {k:"hi", label:"Pass 上限", unit:"dBm", req:true}],
+    pairs:[["lo","hi"]],
+    out:v=>({params:{target_power_dbm:num(v.target), dut_rx_power_dbm:num(v.rxp)},
+      limits:[lim("iBF Power","dBm",num(v.lo),num(v.hi))]}) },
+
+  { key:"rxcal", title:"RX Gain Error", desc:"接收增益校正與驗證", group:"band", stage:"Calibration", path:"Rx",
+    fields:[
+      {k:"rxp", label:"DUT Rx Power", unit:"dBm", req:true},
+      {k:"lo", label:"Criteria 下限", unit:"dB", req:true},
+      {k:"hi", label:"Criteria 上限", unit:"dB", req:true},
+      {k:"rec", label:"記錄校正結果", type:"yn"}],
+    pairs:[["lo","hi"]],
+    out:v=>({params:{dut_rx_power_dbm:num(v.rxp), record_result:v.rec==="Y"},
+      limits:[lim("Rx Gain Error","dB",num(v.lo),num(v.hi))]}) },
+
+  { key:"tx", title:"Tx Verification", desc:"Power / EVM / Freq Accuracy / Spectrum Mask", group:"band", stage:"Verification", path:"Tx",
+    specHint:"規格留空＝該項不測",
+    fields:[
+      {k:"target", label:"Target Power", unit:"dBm", req:true},
+      {k:"pwlo", label:"Power 誤差下限", unit:"dB"},
+      {k:"pwhi", label:"Power 誤差上限", unit:"dB"},
+      {k:"evm", label:"EVM 上限", unit:"dB"},
+      {k:"felo", label:"Freq Acc 下限", unit:"ppm"},
+      {k:"fehi", label:"Freq Acc 上限", unit:"ppm"},
+      {k:"mask", label:"Spectrum Mask 上限", unit:"%", range:[0,100]}],
+    pairs:[["pwlo","pwhi"],["felo","fehi"]],
+    atLeastOne:["pwlo","pwhi","evm","felo","fehi","mask"],
+    derived:v=>`→ Power ${absRange(v.target,v.pwlo,v.pwhi)} dBm`,
+    out:v=>{
+      const L=[];
+      if(v.pwlo!==""||v.pwhi!=="") L.push(lim("Power","dBm",add(v.target,v.pwlo),add(v.target,v.pwhi),{lsl:num(v.pwlo),usl:num(v.pwhi)}));
+      if(v.evm!=="") L.push(lim("EVM","dB",null,num(v.evm)));
+      if(v.felo!==""||v.fehi!=="") L.push(lim("Freq Error","ppm",num(v.felo),num(v.fehi)));
+      if(v.mask!=="") L.push(lim("Spectrum Mask","%",null,num(v.mask)));
+      return {params:{target_power_dbm:num(v.target)}, limits:L};
+    } },
+
+  { key:"per", title:"Rx PER", desc:"接收靈敏度", group:"band", stage:"Verification", path:"Rx",
+    fields:[
+      {k:"sens", label:"Sensitivity", unit:"dBm", req:true},
+      {k:"per", label:"PER 上限", unit:"%", req:true, range:[0,100]}],
+    out:v=>({params:{sensitivity_dbm:num(v.sens)}, limits:[lim("PER","%",null,num(v.per))]}) },
+
+  { key:"tp", title:"Throughput", desc:"傳輸速率", group:"Throughput", stage:"Verification", path:"Throughput", dir:true, auto:true,
+    fields:[
+      {k:"rssi", label:"RSSI", unit:"dBm", req:true},
+      {k:"rlo", label:"RSSI 下限", unit:"dBm", req:true},
+      {k:"rhi", label:"RSSI 上限", unit:"dBm", req:true},
+      {k:"tput", label:"Throughput 下限", unit:"Mbps", req:true}],
+    pairs:[["rlo","rhi"]],
+    out:v=>({params:{rssi_dbm:num(v.rssi)},
+      limits:[lim("RSSI","dBm",num(v.rlo),num(v.rhi)), lim("Throughput","Mbps",num(v.tput),null)]}) }
+];
+const SEC = Object.fromEntries(SECTIONS.map(s=>[s.key,s]));
+function add(a,b){ if(a===""||b===""||a==null||b==null) return null; return +(Number(a)+Number(b)).toFixed(3); }
+function absRange(t,lo,hi){ const a=add(t,lo), b=add(t,hi); return (a==null&&b==null)?"—":`${a??"—"} ~ ${b??"—"}`; }
+function lim(item,unit,lsl,usl,rel){ const o={item,unit,lsl,usl}; if(rel) o.relative=rel; return o; }
+
+/* ---------- 狀態 ---------- */
+// 所有頁：每個頻段各一套（頻段測項 + Throughput）
+const PAGES = BAND_KEYS.flatMap(band => SECTIONS.map(s => pidOf(band, s.key)));
+const pagesIn = band => PAGES.filter(p => bandOf(p) === band);
+const titleOf = pid => secOf(pid).titles?.[bandOf(pid)] ?? secOf(pid).title;
+function blankSec(pid, o={}){
+  const s = secOf(pid), v = {};
+  s.fields.forEach(f => v[f.k] = o.v?.[f.k] ?? (f.type==="yn" ? "Y" : ""));
+  const bw = {};
+  BWS.forEach(b => bw[b] = {chs:o.chs?.[b] ?? [], ov:o.ov?.[b] ?? {}});
+  return {band:bandOf(pid), mode:o.mode ?? "EHT", rate:o.rate ?? (s.auto ? "auto" : "MCS13"), nss:o.nss ?? 1,
+          chains:o.chains ?? [true,true,true,true], dirs:o.dirs ?? {TX:true,RX:true}, v, bw};
+}
+// 用本地時間，不用 toISOString（那是 UTC，台灣早上 8 點前會變成前一天）
+function today(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function blankState(){
+  return {meta:{project:"",rd:"",date:today(),rev:"R0A"},
+          sec:Object.fromEntries(PAGES.map(p=>[p,blankSec(p)]))};
+}
+let state = blankState();
+let band = "5G";                 // 左側目前看的頻段
+let cur = pidOf(band, "cal");    // 目前顯示的頁：頁 id 或 "overview"
+const ui = {pick:{}, ov:{}, dismiss:{}, fold:{}};   // 介面展開／關閉狀態，不存檔
+
+/* ---------- 計算 ---------- */
+const rateList = (pid, mode) => (secOf(pid).auto ? ["auto"] : []).concat(MODES[mode].rates);
+const nssOn = d => MODES[d.mode].nss && d.rate !== "auto";
+const usedBws = d => bwsOf(d.band, d.mode).filter(b => d.bw[b].chs.length);
+// 目前 Mode 不支援、但之前有選頻道的頻寬（不列入輸出，改回支援的 Mode 會恢復）
+const hiddenBws = d => BWS.filter(b => !bwsOf(d.band, d.mode).includes(b) && d.bw[b].chs.length);
+function hiddenNote(d){
+  const h = hiddenBws(d);
+  return h.length ? `${d.mode} 不支援 ${h.map(b=>b+" MHz").join("、")}，原本選的頻道（${h.map(b=>`${b}M：${[...d.bw[b].chs].sort((x,y)=>x-y).join(", ")}`).join("；")}）暫時不列入；改回支援的 Mode 就會恢復` : "";
+}
+const chainsOf = d => d.chains.map((c,j)=>c?j:null).filter(x=>x!==null);
+function effV(d, b){
+  const v = {...d.v};
+  for (const [k,val] of Object.entries(d.bw[b].ov)) if (val !== "" && val != null) v[k] = val;
+  return v;
+}
+const isOv = (d,b,k) => d.bw[b].ov[k] !== undefined && d.bw[b].ov[k] !== "";
+const ovCount = (d,b) => Object.values(d.bw[b].ov).filter(x=>x!==""&&x!=null).length;
+function pointsOf(pid){
+  const d = state.sec[pid], s = secOf(pid), pts = [];
+  const dirs = s.dir ? ["TX","RX"].filter(x=>d.dirs[x]) : [null];
+  for (const b of usedBws(d)) for (const ch of [...d.bw[b].chs].sort((x,y)=>x-y)) for (const dir of dirs)
+    pts.push({b, ch, dir, v:effV(d,b)});
+  return pts;
+}
+// 沒選頻道、也沒填任何規格 = 還沒開始（視為不測，不算錯）
+function untouched(pid){
+  const d = state.sec[pid];
+  return !usedBws(d).length && secOf(pid).fields.every(f => f.type==="yn" || d.v[f.k]==="");
+}
+
+/* ---------- 驗證 ---------- */
+function validate(pid){
+  const s = secOf(pid), d = state.sec[pid], errs = [], marks = new Set();
+  if (untouched(pid)) return {errs, marks};
+  const bad = (m, ...ks) => { errs.push(m); ks.forEach(k=>marks.add(k)); };
+  if (!d.chains.some(Boolean)) bad("至少要勾一個 Chain", "chains");
+  if (s.dir && !d.dirs.TX && !d.dirs.RX) bad("至少要勾一個方向", "dirs");
+  const bws = usedBws(d);
+  if (!bws.length) { bad("還沒選任何頻道", "chs"); return {errs, marks}; }
+  for (const f of s.fields) if (f.req && d.v[f.k] === "" && bws.some(b => !isOv(d,b,f.k))) bad(`${f.label} 必填`, "v:"+f.k);
+  for (const b of bws) {
+    const v = effV(d,b), where = k => isOv(d,b,k) ? `ov:${b}:${k}` : "v:"+k;
+    for (const [lo,hi] of s.pairs || []) {
+      const A = v[lo], B = v[hi], L = s.fields.find(f=>f.k===lo).label.replace(/下限$/,"");
+      if ((A==="") !== (B==="")) bad(`${b}MHz：${L}上下限要成對填寫`, where(A===""?lo:hi));
+      else if (A!=="" && Number(A) > Number(B)) bad(`${b}MHz：${L}下限大於上限`, where(lo), where(hi));
+    }
+    // 百分比欄位只能 0～100
+    for (const f of s.fields) if (f.range && v[f.k] !== "" && (Number(v[f.k]) < f.range[0] || Number(v[f.k]) > f.range[1]))
+      bad(`${isOv(d,b,f.k) ? b+"MHz：" : ""}${f.label} 要在 ${f.range[0]}～${f.range[1]} ${f.unit} 之間`, where(f.k));
+    if (s.atLeastOne && s.atLeastOne.every(k => v[k] === "")) bad(`至少要填一個測項規格`, ...s.atLeastOne.map(k=>"v:"+k));
+  }
+  return {errs:[...new Set(errs)], marks};
+}
+
+/* ---------- 畫面 ---------- */
+const $ = id => document.getElementById(id);
+const opts = (list, curV) => list.map(x=>`<option value="${x}"${x==curV?" selected":""}>${x}</option>`).join("");
+
+function renderSide(){
+  const groups = [[`${band} 測項`,"band"],["Throughput 工作表","Throughput"]];
+  const item = pid => {
+    const s = secOf(pid), n = pointsOf(pid).length, e = validate(pid).errs.length, u = untouched(pid);
+    const ic = u ? `<span class="ic todo"></span>` : e ? `<span class="ic bad">!</span>` : `<span class="ic ok">✓</span>`;
+    return `<button class="item${cur===pid?" on":""}" data-go="${pid}">${ic}
+      <span class="nm">${titleOf(pid)}<small>${u?"未填（不測）":e?`${e} 個問題`:s.desc}</small></span>
+      <span class="n">${u?"":n}</span></button>`;
+  };
+  const cnt = b => pagesIn(b).reduce((a,p)=>a+pointsOf(p).length,0);
+  const tabs = `<div class="bandtabs">${BAND_KEYS.map(b=>`<button data-band="${b}" class="${b===band?"on":""}">${b}<small>${cnt(b)||""}</small></button>`).join("")}</div>`;
+  const html = groups.map(([t,g]) => `<div class="side-t">${t}</div>` + pagesIn(band).filter(p=>secOf(p).group===g).map(item).join("")).join("");
+  const errN = PAGES.reduce((a,p)=>a+validate(p).errs.length,0);
+  const total = PAGES.reduce((a,p)=>a+pointsOf(p).length,0);
+  $("side").innerHTML = tabs + html + `<div class="side-t">完成（${BAND_KEYS.join("/")}）</div>
+    <button class="item${cur==="overview"?" on":""}" data-go="overview">
+      <span class="ic ${errN?"bad":"ok"}">${errN?"!":"≡"}</span>
+      <span class="nm">總覽／匯出<small>${errN?`還有 ${errN} 個問題`:"確認後下載"}</small></span></button>
+    <div class="side-total">共 <b>${total}</b> 個測試點</div>`;
+  $("h-band").textContent = BAND_KEYS.join("/");
+}
+
+function fieldHtml(f, val, dataK, placeholder){
+  const ctl = f.type==="yn"
+    ? `<select data-k="${dataK}">${placeholder!=null?`<option value="">同上</option>`:""}${opts(["Y","N"],val)}</select>`
+    : `<input type="number" step="any" data-k="${dataK}" value="${val ?? ""}"${placeholder?` placeholder="${placeholder}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}>`;
+  return `<label class="fld">${f.label}<span class="in">${ctl}${f.unit?`<span class="u">${f.unit}</span>`:""}</span></label>`;
+}
+
+function renderMain(){
+  if (cur === "overview") return renderOverview();
+  const pid = cur, s = secOf(pid), d = state.sec[pid];
+  const list = pagesIn(band), idx = list.indexOf(pid), prev = list[idx-1], next = list[idx+1];
+  $("main").innerHTML = `
+    <div class="page-h"><h2>${titleOf(pid)}<span class="tag" style="margin-left:8px;vertical-align:middle">${d.band}</span></h2><p>${s.desc}</p></div>
+
+    <div class="step"><div class="step-t"><span class="no">1</span><h3>測試條件</h3></div>
+      <div class="fields">
+        ${s.dir?`<label class="fld">方向<span class="checks" data-k="dirs">${["TX","RX"].map(x=>`<label><input type="checkbox" data-dir="${x}"${d.dirs[x]?" checked":""}>${x}</label>`).join("")}</span></label>`:""}
+        <label class="fld">802.11 Mode<span class="in"><select data-k="mode">${opts(Object.keys(BANDS[d.band].modes),d.mode)}</select></span></label>
+        <label class="fld">Rate<span class="in"><select data-k="rate">${opts(rateList(pid,d.mode),d.rate)}</select></span></label>
+        <label class="fld">NSS<span class="in"><select data-k="nss"${nssOn(d)?"":" disabled"}>${nssOn(d)?opts([1,2,3,4],d.nss):"<option>—</option>"}</select></span></label>
+        <label class="fld">Chain<span class="checks" data-k="chains">${d.chains.map((c,j)=>`<label><input type="checkbox" data-chain="${j}"${c?" checked":""}>${j}</label>`).join("")}</span></label>
+      </div></div>
+
+    <div class="step"><div class="step-t"><span class="no">2</span><h3>規格</h3>${s.specHint?`<span class="hint">${s.specHint}</span>`:""}</div>
+      <div class="fields">
+        ${s.fields.map(f=>fieldHtml(f, d.v[f.k], "v:"+f.k)).join("")}
+        ${s.derived?`<span class="derived" data-derived>${s.derived(d.v)}</span>`:""}
+      </div></div>
+
+    <div class="step" data-k="chs"><div class="step-t"><span class="no">3</span><h3>頻道</h3><span class="hint">點一下那一行就能展開選頻道，頻率自動對應</span></div>
+      ${hiddenNote(d) && ui.dismiss[pid]!==hiddenNote(d)?`<div class="hidden-note"><span>⚠ ${hiddenNote(d)}</span><button class="x" data-dismiss title="關閉提示">×</button></div>`:""}
+      ${bwsOf(d.band,d.mode).map(b=>bwHtml(pid,b)).join("")}
+    </div>
+
+    <div class="pager">
+      <span>${prev?`<button class="btn" data-go="${prev}">← ${titleOf(prev)}</button>`:""}</span>
+      <button class="btn primary" data-go="${next||"overview"}">${next?titleOf(next):"總覽／匯出"} →</button>
+    </div>`;
+  paintMain();
+}
+
+function bwHtml(pid, b){
+  const s = secOf(pid), d = state.sec[pid], bd = d.bw[b], k = `${pid}:${b}`;
+  const picked = [...bd.chs].sort((x,y)=>x-y);
+  const n = ovCount(d,b);
+  return `<div class="bw">
+    <div class="bw-h" data-bwrow="${b}"><span class="arrow">${ui.pick[k]?"▾":"▸"}</span><span class="bw-name">${b} MHz</span>
+      <span class="picked">${picked.length?picked.map(c=>`<span class="tag" title="${freqOf(d.band,c)} MHz">${c}</span>`).join(""):`<span class="none">不測</span>`}</span>
+      <span class="bw-tools">
+        <button class="link" data-pick="${b}">${ui.pick[k]?"收合":"選頻道"}</button>
+        ${picked.length?`<button class="link" data-ov="${b}">${ui.ov[k]?"收合例外":"此頻寬規格不同"}${n?`<span class="ov-tag">已設 ${n} 項</span>`:""}</button>`:""}
+      </span></div>
+    ${ui.pick[k]?`<div class="picker"><div class="chips">
+        ${BANDS[d.band].ch[b].map(ch=>`<label class="chip"><input type="checkbox" data-ch="${b}:${ch}"${bd.chs.includes(ch)?" checked":""}><span>${ch}<small>${freqOf(d.band,ch)}</small></span></label>`).join("")}
+      </div><div class="picker-f"><button class="link" data-all="${b}">全選</button><button class="link" data-none="${b}">清除</button></div></div>`:""}
+    ${ui.ov[k]&&picked.length?`<div class="ov"><div class="hint">只填 ${b} MHz 跟上面規格不一樣的，留空＝沿用</div><div class="fields">
+        ${s.fields.map(f=>fieldHtml(f, bd.ov[f.k], `ov:${b}:${f.k}`, f.type==="yn"?"":(d.v[f.k]||""))).join("")}
+      </div></div>`:""}
+  </div>`;
+}
+
+function paintMain(){
+  if (cur === "overview") return;
+  const {marks} = validate(cur);
+  $("main").querySelectorAll("[data-k]").forEach(x => x.classList.toggle("err-cell", marks.has(x.dataset.k)));
+  const dv = $("main").querySelector("[data-derived]"); if (dv) dv.textContent = secOf(cur).derived(state.sec[cur].v);
+}
+
+function specSummary(s, v){
+  return s.fields.filter(f=>v[f.k]!=="" && f.type!=="yn").map(f=>`${f.label} ${v[f.k]}${f.unit?" "+f.unit:""}`).join("、");
+}
+function renderOverview(){
+  const errs = [];
+  PAGES.forEach(p => validate(p).errs.forEach(e => errs.push(`${bandOf(p)} ${titleOf(p)}：${e}`)));
+  const row = p => {
+    const s = secOf(p), d = state.sec[p];
+    if (untouched(p)) return `<tr><td><b>${titleOf(p)}</b></td><td colspan="4" class="sm">未填（不測）</td></tr>`;
+    const bws = usedBws(d);
+    const ov = bws.filter(b=>ovCount(d,b)).map(b=>`${b}M：`+Object.entries(d.bw[b].ov).filter(([,x])=>x!=="").map(([k,x])=>`${s.fields.find(f=>f.k===k).label} ${x}`).join("、"));
+    return `<tr><td><b>${titleOf(p)}</b><div class="sm">${s.desc}</div></td>
+      <td class="nw">${s.dir?["TX","RX"].filter(x=>d.dirs[x]).join("/")+" · ":""}${d.mode} · ${d.rate}${nssOn(d)?" · NSS"+d.nss:""}<div class="sm">Chain ${chainsOf(d).join(",")}</div></td>
+      <td>${specSummary(s,d.v)}${ov.length?`<div class="sm" style="color:var(--warn)">例外 ${ov.join("；")}</div>`:""}${hiddenNote(d)?`<div class="sm" style="color:var(--warn)">⚠ ${hiddenNote(d)}</div>`:""}</td>
+      <td class="nw">${bws.map(b=>`<div class="chline"><b>${b}M</b>${[...d.bw[b].chs].sort((x,y)=>x-y).join("  ")}</div>`).join("")}</td>
+      <td class="mono">${pointsOf(p).length}</td></tr>`;
+  };
+  // 點頻段那一行就收合／展開
+  const rows = BAND_KEYS.map(b => {
+    const n = pagesIn(b).reduce((a,p)=>a+pointsOf(p).length,0);
+    return `<tr data-fold="${b}" style="cursor:pointer"><th colspan="5" style="background:var(--accent-soft);color:var(--accent)">${ui.fold[b]?"▸":"▾"} ${b}<span class="sm" style="font-weight:400;margin-left:8px">${n} 個測試點</span></th></tr>`
+      + (ui.fold[b] ? "" : pagesIn(b).map(row).join(""));
+  }).join("");
+  const o = buildOutput();
+  $("main").innerHTML = `
+    <div class="page-h"><h2>總覽／匯出</h2><p>${state.meta.project||"（未填 Project）"} · ${BAND_KEYS.join("/")} · ${state.meta.rev||""} · ${state.meta.rd||"（未填填寫人）"}</p></div>
+    ${errs.length?`<div class="step" style="border-color:#f1c2c2"><div class="step-t"><h3 style="color:var(--err)">還有 ${errs.length} 個問題</h3></div><ul class="errlist">${errs.map(e=>`<li>${e}</li>`).join("")}</ul></div>`:""}
+    <div class="step"><div class="tbl-wrap"><table>
+      <thead><tr><th>測項</th><th class="nw">條件</th><th>規格</th><th class="nw">頻道</th><th class="nw">點數</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="step">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" id="b-export">下載中介格式 JSON</button>      </div>
+      <div class="exp">${EXPORTERS.map(x=>{ const r = x.conv(o); return `<div class="exp-card">
+        <h4>${x.name}</h4><div class="sm">${x.desc}</div>
+        <button class="btn" data-exp="${x.key}">下載 ${x.file}</button>
+        ${r.notes.length?`<ul class="notes">${r.notes.map(n=>`<li>${n}</li>`).join("")}</ul>`:""}</div>`; }).join("")}</div>
+      <details style="margin-top:14px"><summary>逐點明細</summary><div class="tbl-wrap" style="margin-top:8px">${detailTables()}</div></details>
+      <details style="margin-top:10px"><summary>JSON 預覽</summary><div class="code mono">${esc(JSON.stringify(o, null, 2))}</div></details>
+      ${EXPORTERS.map(x=>`<details style="margin-top:10px"><summary>${x.file} 預覽</summary><div class="code mono">${esc(x.conv(o).text)}</div></details>`).join("")}
+    </div>`;
+  const okToGo = () => !errs.length || confirm(`還有 ${errs.length} 個問題，仍要下載？`);
+  $("b-export").onclick = () => {
+    if (okToGo()) download(`${o.project||"project"}_${o.revision||""}_RFreq.json`, JSON.stringify(o,null,2), "application/json");
+  };
+  $("main").querySelectorAll("[data-exp]").forEach(b => b.onclick = () => {
+    const x = EXPORTERS.find(e => e.key === b.dataset.exp);
+    if (okToGo()) download(x.file, x.conv(o).text, "text/plain");
+  });
+}
+const esc = t => t.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+function download(name, text, type){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text],{type}));
+  a.download = name; a.click();
+}
+function detailTables(){
+  return PAGES.filter(p=>!untouched(p)).map(p => {
+    const s = secOf(p), d = state.sec[p];
+    return `<div style="margin:10px 0 4px;font-weight:700">${d.band} · ${titleOf(p)}</div><table class="detail"><thead><tr><th>#</th>${s.dir?"<th>方向</th>":""}<th>BW</th><th>Ch</th><th>Freq</th>
+      ${s.fields.map(f=>`<th>${f.label}</th>`).join("")}</tr></thead><tbody>
+      ${pointsOf(p).map((t,i)=>`<tr><td>${i+1}</td>${s.dir?`<td>${t.dir}</td>`:""}<td>${t.b}</td><td>${t.ch}</td><td>${freqOf(d.band,t.ch)}</td>
+        ${s.fields.map(f=>`<td class="${isOv(d,t.b,f.k)?"o":""}">${t.v[f.k]===""?"—":t.v[f.k]}</td>`).join("")}</tr>`).join("")}
+      </tbody></table>`;
+  }).join("");
+}
+
+/* ---------- 中介格式（一列一個測試點） ---------- */
+function buildOutput(){
+  const out = [];
+  for (const pid of PAGES) {
+    const s = secOf(pid), d = state.sec[pid];
+    pointsOf(pid).forEach((p,i) => {
+      const o = s.out(p.v);
+      out.push({
+        id:`${d.band}-${s.key.toUpperCase()}-${String(i+1).padStart(3,"0")}`,
+        band:d.band, test_key:s.key, test:titleOf(pid), stage:s.stage, path:s.path, ...(s.dir?{direction:p.dir}:{}),
+        mode:d.mode, bandwidth_mhz:p.b, channel:p.ch, freq_mhz:freqOf(d.band,p.ch),
+        rate:d.rate, nss:nssOn(d)?Number(d.nss):null, chains:chainsOf(d),
+        params:o.params, limits:o.limits
+      });
+    });
+  }
+  return {schema:"rf-requirement/0.2", project:state.meta.project, revision:state.meta.rev,
+          rd:state.meta.rd, date:state.meta.date, bands:BAND_KEYS.filter(b=>out.some(r=>r.band===b)), rows:out};
+}
+
+/* ---------- 轉成儀器的 test flow（格式由儀器商固定，照儀器商範例檔） ----------
+   只讀中介 JSON，不碰網頁狀態；每家儀器一個 conv，回傳 {text, notes} */
+const CRLF = "\r\n";
+const fmt = n => String(+Number(n).toFixed(3));
+const powerLim = r => r.limits.find(l => l.item === "Power");
+const isTx = r => r.test_key === "tx", isRx = r => r.test_key === "per", isCal = r => r.test_key === "cal";
+// 共用提醒：範例裡沒有對應的測項、NSS、只能寫在 limit 檔的規格
+function commonNotes(o, unsupported, limitFile, sensInLimit){
+  const notes = [];
+  for (const [key, why] of unsupported) {
+    const t = [...new Set(o.rows.filter(r => r.test_key === key).map(r => `${r.band} ${r.test}`))];
+    if (t.length) notes.push(`${t.join("、")}：${why}`);
+  }
+  if (o.rows.some(r => (isTx(r)||isRx(r)) && r.nss > 1)) notes.push("範例沒有 NSS 寫法，NSS 2 以上的點目前照 1 輸出");
+  const extra = new Set();
+  o.rows.filter(isTx).forEach(r => r.limits.filter(l => l.item !== "Power").forEach(l => extra.add(l.item)));
+  if (o.rows.some(isRx)) { if (sensInLimit) extra.add("Sensitivity"); extra.add("PER 上限"); }
+  if (extra.size) notes.push(`${[...extra].join("、")} 要寫在 ${limitFile}，目前用儀器預設值`);
+  return notes;
+}
+const LEGACY = ["11a","11b","11g"];
+// BF、Throughput 不在筑波／iTest 機台上測，在其他站測
+const OTHER_STATION = "此項目在其他站測，不寫進這份檔案";
+
+// 筑波 ATSuite：test_item.csv，一天線一列，ANT_1 起算
+// FORMAT 只有 HE_SU 有範例；EHT_MU 照 Test_Limit.txt 只有 EHTMU 推得；11b 的 DSSS 也是照 Test_Limit.txt 推的
+const ATS_FORMAT = {"11b":"DSSS", "11g":"NON_HT", "11a":"NON_HT", HT:"HT", VHT:"VHT", HE:"HE_SU", EHT:"EHT_MU"};
+// 11b 的 RATE 照 Test_Limit.txt 的列名
+const ATS_11B = {"1M":"DSSS-1", "2M":"DSSS-2", "5.5M":"CCK-5_5", "11M":"CCK-11"};
+const atsRate = r => r.mode === "11b" ? ATS_11B[r.rate] : LEGACY.includes(r.mode) ? "OFDM-" + r.rate.replace("M","") : r.rate;
+// dutSetup.txt 的校正欄位：2.4G 不分頻寬，5G 只有 BW20
+const ATS_CAL = {"2.4G":["CAL_TRIM_FREQUENCY_2G／POWER_2G", [20,40]], "5G":["CAL_TRIM_FREQUENCY／POWER_5G_BW20", [20]]};
+function toATSuite(o){
+  const L = ["TEST_ITEM,BANDWIDTH,RATE,FREQ_MHZ,POWER,POWER_LEVEL,ANT,FORMAT,PWR_UP_TOLERANCE,PWR_LOW_TOLERANCE,SAMPLING_TIME"];
+  const notes = commonNotes(o, [["bf",OTHER_STATION],["rxcal","ATSuite 範例沒有對應，未輸出"],["tp",OTHER_STATION]], "Test_Limit.txt");
+  const cal = o.rows.filter(isCal);
+  if (cal.length) {
+    L.push("WIFI_CAL,NULL,NULL,NULL,Default,NULL,NULL,NULL,NULL,NULL,100");
+    for (const b of BAND_KEYS) {
+      const c = cal.filter(r => r.band === b); if (!c.length) continue;
+      const [field, okBw] = ATS_CAL[b];
+      notes.push(`${b} 校正點要在 dutSetup.txt 設（${field}）：${c.map(r=>`${r.freq_mhz} MHz ${r.params.target_power_dbm} dBm`).join("、")}`);
+      if (c.some(r => !okBw.includes(r.bandwidth_mhz))) notes.push(`dutSetup.txt 的 ${b} 只有 BW20 的校正頻率欄，其他頻寬的校正點無法對應`);
+    }
+  }
+  const guessed = [...new Set(o.rows.filter(r=>isTx(r)||isRx(r)).map(r=>r.mode))].filter(m => m !== "HE" && m !== "EHT");   // EHT 照 Test_Limit.txt 的 EHTMU
+  if (guessed.length) notes.push(`FORMAT 只有 HE_SU 有範例，${guessed.map(m=>`${m}→${ATS_FORMAT[m]}`).join("、")} 是推測，待確認`);
+  if (o.rows.some(r => (isTx(r)||isRx(r)) && r.mode === "11b")) notes.push("11b 的 RATE（DSSS-1、CCK-11…）照 Test_Limit.txt 的列名推測，待確認");
+  for (const r of o.rows) {
+    if (!isTx(r) && !isRx(r)) continue;
+    const p = isTx(r) && powerLim(r);
+    for (const c of r.chains) L.push(isTx(r)
+      ? ["WIFI_TX", `BW-${r.bandwidth_mhz}`, atsRate(r), r.freq_mhz, fmt(r.params.target_power_dbm), "NULL", `ANT_${c+1}`, ATS_FORMAT[r.mode],
+         p ? fmt(p.relative.usl) : "Default", p ? fmt(-p.relative.lsl) : "Default", "Default"].join(",")
+      : ["WIFI_RX", `BW-${r.bandwidth_mhz}`, atsRate(r), r.freq_mhz, fmt(r.params.sensitivity_dbm), "NULL", `ANT_${c+1}`, ATS_FORMAT[r.mode],
+         "NULL", "NULL", "NULL"].join(","));
+  }
+  return {text: L.join(CRLF) + CRLF, notes};
+}
+
+// iTest：WT_FLOW.txt，一行一指令，CHAIN0 起算，功率寫絕對值 [目標][下限][上限]
+// 每個頻段一段 INSERT_DUT … REMOVE_DUT；INSTANCE 開頭／結尾值照範例（2.4G 0／0、5G 1／65）
+const WT_PREFIX = {HT:"HT", VHT:"AC", HE:"AX", EHT:"BE"};
+const WT_INSTANCE = {"2.4G":[0,0], "5G":[1,65]};
+const wtRate = r => LEGACY.includes(r.mode) ? r.rate : `${WT_PREFIX[r.mode]}${r.bandwidth_mhz}-${r.rate}`;
+function toITest(o){
+  const notes = commonNotes(o, [["bf",OTHER_STATION],["rxcal","可能對應 WT_QCA_CAL_RX_FW，待確認，未輸出"],["tp",OTHER_STATION]], "WT_WIFI_LIMIT.txt", true);
+  const L = [`// RF 測試需求轉出：${[o.project,o.revision,o.rd,o.date].filter(Boolean).join(" / ")}`, "", "WT_CONNECT_TESTER", ""];
+  const used = BAND_KEYS.filter(b => o.rows.some(r => r.band === b && (isCal(r)||isTx(r)||isRx(r))));
+  let noPwr = false, calNote = false;
+  for (const b of used) {
+    const rows = o.rows.filter(r => r.band === b), [i0, i1] = WT_INSTANCE[b];
+    L.push(`// ${b}`, `WT_INSERT_DUT	${b}`, `WT_INIT_DUT	${b}`, `WT_QCA_SET_INSTANCE	${i0}`, "WT_QCA_SET_PHYID	0", "", "WT_CAL_START");
+    const cal = rows.filter(isCal);
+    if (cal.length) {
+      calNote = true;
+      L.push("//	以下為 RD 的 Calibrate Power 需求，請人工改成 QCA 校正指令");
+      for (const r of cal) { const p = powerLim(r);
+        for (const c of r.chains) L.push(`//	${r.freq_mhz}	${wtRate(r)}	CHAIN${c}	[${fmt(r.params.target_power_dbm)}][${fmt(p.lsl)}][${fmt(p.usl)}]`); }
+    }
+    L.push("WT_CAL_END", "");
+    for (const r of rows) {
+      if (!isTx(r) && !isRx(r)) continue;
+      const p = isTx(r) && powerLim(r);
+      if (isTx(r) && !p) noPwr = true;
+      for (const c of r.chains) L.push(isTx(r)
+        ? `	WT_VERIFY_TX_ALL	${r.freq_mhz}	${wtRate(r)}	CHAIN${c}${p ? ` [${fmt(r.params.target_power_dbm)}][${fmt(p.lsl)}][${fmt(p.usl)}]` : ""}`
+        : `	WT_VERIFY_RX_PER	${r.freq_mhz}	${wtRate(r)}	CHAIN${c}`);
+      L.push("");
+    }
+    L.push(`WT_QCA_SET_INSTANCE	${i1}`, "WT_SAVE_CAL_DATA", "", `WT_REMOVE_DUT	${b}`, "", "");
+  }
+  L.push("WT_SHOW_VERIFY_SUMMARY", "WT_DISCONNECT_TESTER");
+  if (calNote) notes.push("校正是 QCA 專用指令，只先把需求寫成註解，要人工補");
+  if (noPwr) notes.push("沒填 Power 誤差的 TX 點不帶 [目標][下限][上限]，目標功率會改用 WT_WIFI_LIMIT.txt 的預設值");
+  // RX 靈敏度在 iTest 只能依 頻段／Mode／頻寬／Rate 設一個值
+  const sens = {};
+  o.rows.filter(isRx).forEach(r => (sens[`${r.band} ${wtRate(r)}`] ??= new Set()).add(r.params.sensitivity_dbm));
+  const clash = Object.entries(sens).filter(([,s]) => s.size > 1).map(([k]) => k);
+  if (clash.length) notes.push(`${clash.join("、")} 有不同的 Sensitivity，但 iTest 同一個 Rate 只能設一個值`);
+  if (used.length) notes.push(`WT_QCA_SET_INSTANCE、PHYID 照範例（${used.map(b=>`${b} ${WT_INSTANCE[b].join("／")}`).join("、")}），換晶片可能不同`);
+  return {text: L.join(CRLF) + CRLF, notes};
+}
+
+const EXPORTERS = [
+  {key:"ats", name:"筑波 ATSuite", desc:"測項檔，規格預設看 Test_Limit.txt、校正看 dutSetup.txt", file:"test_item.csv", conv:toATSuite},
+  {key:"wt",  name:"iTest",       desc:"測項檔，規格看 WT_WIFI_LIMIT.txt", file:"WT_FLOW.txt", conv:toITest}
+];
+
+/* ---------- 事件 ---------- */
+function update(full){ save(); renderSide(); full ? renderMain() : paintMain(); }
+function setByKey(d, k, val){
+  const p = k.split(":");
+  if (p[0]==="v") d.v[p[1]] = val;
+  else if (p[0]==="ov") d.bw[p[1]].ov[p[2]] = val;
+  else d[k] = (k==="nss") ? Number(val) : val;
+}
+// 百分比欄位（min=0）直接不讓打負號
+document.addEventListener("keydown", e => {
+  if (e.key === "-" && e.target.type === "number" && e.target.min === "0") e.preventDefault();
+});
+document.addEventListener("input", e => {
+  const t = e.target; if (t.type!=="number" || !t.dataset.k || cur==="overview") return;
+  setByKey(state.sec[cur], t.dataset.k, t.value);
+  update(false);
+});
+document.addEventListener("change", e => {
+  const t = e.target; if (cur==="overview" || !$("main").contains(t) || t.type==="number") return;
+  const d = state.sec[cur];
+  if (t.dataset.ch) {
+    const [b,ch] = t.dataset.ch.split(":").map(Number), chs = d.bw[b].chs;
+    t.checked ? chs.push(ch) : chs.splice(chs.indexOf(ch),1);
+    return update(true);
+  }
+  if (t.dataset.chain != null) { d.chains[+t.dataset.chain] = t.checked; return update(false); }
+  if (t.dataset.dir) { d.dirs[t.dataset.dir] = t.checked; return update(false); }
+  if (!t.dataset.k) return;
+  setByKey(d, t.dataset.k, t.value);
+  if (t.dataset.k==="mode" && !rateList(cur,d.mode).includes(d.rate)) d.rate = rateList(cur,d.mode)[0];
+  update(t.dataset.k==="mode" || t.dataset.k==="rate");
+});
+document.addEventListener("click", e => {
+  // 點頻寬那一行（除了「此頻寬規格不同」）就展開／收合頻道選擇
+  const row = e.target.closest("[data-bwrow]");
+  if (row && !e.target.closest("[data-ov]") && cur !== "overview") {
+    const k = `${cur}:${row.dataset.bwrow}`; ui.pick[k] = !ui.pick[k]; return update(true);
+  }
+  const fold = e.target.closest("[data-fold]");
+  if (fold && cur === "overview") { ui.fold[fold.dataset.fold] = !ui.fold[fold.dataset.fold]; return renderOverview(); }
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.go) { cur = t.dataset.go; if (cur !== "overview") band = bandOf(cur); renderSide(); renderMain(); window.scrollTo({top:0}); return; }
+  // 切頻段：停在同一個測項（在總覽頁就留在總覽）
+  if (t.dataset.band) {
+    band = t.dataset.band;
+    if (cur !== "overview") cur = pidOf(band, secOf(cur).key);
+    renderSide(); renderMain(); window.scrollTo({top:0}); return;
+  }
+  if (cur==="overview") return;
+  const d = state.sec[cur];
+  if (t.hasAttribute("data-dismiss")) ui.dismiss[cur] = hiddenNote(d);   // 記住關掉的是哪一則，內容變了會再出現
+  else if (t.dataset.pick) { const k=`${cur}:${t.dataset.pick}`; ui.pick[k] = !ui.pick[k]; }
+  else if (t.dataset.ov) { const k=`${cur}:${t.dataset.ov}`; ui.ov[k] = !ui.ov[k]; }
+  else if (t.dataset.all) d.bw[t.dataset.all].chs = [...BANDS[d.band].ch[t.dataset.all]];
+  else if (t.dataset.none) d.bw[t.dataset.none].chs = [];
+  else return;
+  update(true);
+});
+
+$("b-clear").onclick = () => { if (confirm("清空所有內容？")) { state = blankState(); syncMeta(); update(true); } };
+["project","rd","date","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
+  state.meta[k] = e.target.value; save();
+  if (cur === "overview") renderOverview();   // 總覽頁標題跟著更新
+}));
+function syncMeta(){ ["project","rd","date","rev"].forEach(k => $("m-"+k).value = state.meta[k]); }
+
+/* ---------- 草稿暫存（只存在這台電腦的瀏覽器） ---------- */
+const KEY = "rf-req-draft-B-v2", OLD_KEY = "rf-req-5g-draft-B-v1";
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+function load(){
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.sec) return s; } catch(e){}
+  // 舊版只有 5G、用測項 key 存：搬到 "5G|key"
+  try {
+    const o = JSON.parse(localStorage.getItem(OLD_KEY));
+    if (o && o.sec) { const s = blankState(); s.meta = o.meta;
+      for (const [k,v] of Object.entries(o.sec)) if (SEC[k]) s.sec[pidOf("5G",k)] = {...v, band:"5G"};
+      return s; }
+  } catch(e){}
+  return null;
+}
+
+state = load() || blankState();
+syncMeta(); renderSide(); renderMain();
+</script>
+</body>
+</html>
