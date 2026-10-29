@@ -665,8 +665,8 @@ function toITest(o){
 }
 
 const EXPORTERS = [
-  {key:"ats", name:"筑波 ATSuite", desc:"測項檔，規格預設看 Test_Limit.txt、校正看 dutSetup.txt", file:"test_item.csv", conv:toATSuite},
-  {key:"wt",  name:"iTest",       desc:"測項檔，規格看 WT_WIFI_LIMIT.txt", file:"WT_FLOW.txt", conv:toITest}
+  {key:"ats", name:"筑波 ATSuite", desc:"筑波機台用", file:"test_item.csv", conv:toATSuite},
+  {key:"wt",  name:"iTest",       desc:"iTest 機台用", file:"WT_FLOW.txt", conv:toITest}
 ];
 
 /* ---------- 事件 ---------- */
