@@ -103,7 +103,8 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .chip{position:relative}
 .chip input{position:absolute;opacity:0;pointer-events:none}
 .chip span{display:inline-block;min-width:44px;text-align:center;font-family:Consolas,ui-monospace,monospace;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 6px;cursor:pointer;color:var(--muted);user-select:none;line-height:1.25}
-.chip span small{display:block;font-size:10px;opacity:.75}
+.chip span small{display:block;font-size:12.5px;margin-top:1px;color:#262d3b}
+.chip input:checked+span small{color:#fff}
 .chip span:hover{border-color:var(--accent)}
 .chip input:checked+span{background:var(--accent);border-color:var(--accent);color:#fff}
 .chip input:focus-visible+span{outline:2px solid var(--accent);outline-offset:1px}
