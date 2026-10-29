@@ -470,14 +470,14 @@ function renderOverview(){
     <div class="step"><div class="tbl-wrap"><table>
       <thead><tr><th>測項</th><th class="nw">條件</th><th>規格</th><th class="nw">頻道</th><th class="nw">點數</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <div class="step">
-      <div class="sm" style="color:var(--muted)">下載的壓縮檔解開是資料夾 <b class="mono">${esc(packName())}</b>，裡面有 JSON、該儀器的測項檔和給 MT 的提醒</div>
+      <div class="sm" style="color:var(--muted)">下載的壓縮檔解開是資料夾 <b class="mono">${esc(packName())}</b>，裡面有 JSON、該儀器的測項檔、需求表 Excel 和給 MT 的提醒</div>
       <div class="exp">${EXPORTERS.map(x=>`<div class="exp-card">
         <h4>${x.name}</h4><div class="sm">${x.desc}</div>
         <button class="btn primary" data-exp="${x.key}">下載（${x.file}＋JSON）</button></div>`).join("")}</div>
       <details style="margin-top:14px"><summary>逐點明細</summary><div class="tbl-wrap" style="margin-top:8px">${detailTables()}</div></details>
     </div>`;
   const okToGo = () => !errs.length || confirm(`還有 ${errs.length} 個問題，仍要下載？`);
-  // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）＋給 MT 的提醒
+  // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）＋需求表＋給 MT 的提醒
   $("main").querySelectorAll("[data-exp]").forEach(b => b.onclick = () => {
     if (!okToGo()) return;
     const x = EXPORTERS.find(e => e.key === b.dataset.exp), name = packName(), r = x.conv(o);
@@ -485,6 +485,7 @@ function renderOverview(){
       {name:`${name}/`, data:""},
       {name:`${name}/${name}_RFreq.json`, data:JSON.stringify(o,null,2)},
       {name:`${name}/${x.file}`, data:r.text},
+      {name:`${name}/${name}_需求表.xlsx`, data:buildXlsx(o)},
       {name:`${name}/給MT的提醒.txt`, data:mtNotes(o, x, r.notes)}]);
     download(`${name}.zip`, zip, "application/zip");
   });
@@ -509,7 +510,7 @@ function makeZip(files){
         date = (d.getFullYear()-1980)<<9 | (d.getMonth()+1)<<5 | d.getDate();
   let off = 0;
   for (const f of files) {
-    const nm = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    const nm = enc.encode(f.name), data = typeof f.data === "string" ? enc.encode(f.data) : f.data, crc = crc32(data);
     const h = new DataView(new ArrayBuffer(30));
     [[0,0x04034b50,4],[4,20,2],[6,0x0800,2],[8,0,2],[10,time,2],[12,date,2],[14,crc,4],[18,data.length,4],[22,data.length,4],[26,nm.length,2],[28,0,2]]
       .forEach(([i,v,n]) => n===4 ? h.setUint32(i,v,true) : h.setUint16(i,v,true));
@@ -524,6 +525,142 @@ function makeZip(files){
   [[0,0x06054b50,4],[4,0,2],[6,0,2],[8,files.length,2],[10,files.length,2],[12,size,4],[16,off,4],[20,0,2]]
     .forEach(([i,v,n]) => n===4 ? e.setUint32(i,v,true) : e.setUint16(i,v,true));
   return [...parts, ...dir, e];
+}
+// zip 的各段接成一個 Uint8Array（需求表.xlsx 本身也是 zip，要放進外層 zip）
+function zipBytes(parts){
+  const u = parts.map(p => new Uint8Array(p.buffer, p.byteOffset, p.byteLength));
+  const out = new Uint8Array(u.reduce((a,x) => a + x.length, 0));
+  let i = 0; for (const x of u) { out.set(x, i); i += x.length; }
+  return out;
+}
+
+/* ---------- 需求表.xlsx：照 NEW 版範本的版面，給 MT 看 RD 的完整需求、自己改 LIMIT 檔 ----------
+   Cover／各頻段頁（5 個區塊）／Throughput；共用欄 B～J，規格欄從 K 開始；Tx 照範本兩層表頭 */
+const XL_COMMON = ["test item","IEEE 802.11","channel","Center\nFrequency\n(MHz)","Rate","Chain 0","Chain 1","Chain 2","Chain 3"];
+const limOf = (r, item) => r.limits.find(x => x.item === item) || {};
+const relOf = (r, item) => limOf(r, item).relative || limOf(r, item);
+// 每個區塊：範本上的名稱、規格表頭（兩層的寫成 [上層, [下層…]]）、每列的規格值
+const XL_SECTIONS = {
+  cal:  {label:"Calibrate Power", head:["Target Power (dBm)","lower limit","Upper limit"],
+         vals:r => [r.params.target_power_dbm, relOf(r,"Power").lsl, relOf(r,"Power").usl]},
+  bf:   {head:["Target Power (dBm)","DUT Rx Power(dBm)","Pass lower limit","Pass upper limit"],
+         vals:r => [r.params.target_power_dbm, r.params.dut_rx_power_dbm, limOf(r,"iBF Power").lsl, limOf(r,"iBF Power").usl]},
+  rxcal:{label:"RX Gain Error Calibration\n& Verification", head:["DUT Rx Power(dBm)","Criteria low","Criteria High","Record calibration result"],
+         vals:r => [r.params.dut_rx_power_dbm, limOf(r,"Rx Gain Error").lsl, limOf(r,"Rx Gain Error").usl, r.params.record_result ? "Y" : "N"]},
+  tx:   {label:"Tx\n(Power, EVM, Frequency accuracy)",
+         head:["Target Power (dBm)", ["Power Accuracy (dB)",["lower limit","Upper limit"]], ["EVM (dB)",["Upper limit"]],
+               ["Frequency Accuracy (ppm)",["lower limit","Upper limit"]], ["Spectrum Mask (%)",["Upper limit"]]],
+         vals:r => [r.params.target_power_dbm, relOf(r,"Power").lsl, relOf(r,"Power").usl, limOf(r,"EVM").usl,
+                    limOf(r,"Freq Error").lsl, limOf(r,"Freq Error").usl, limOf(r,"Spectrum Mask").usl]},
+  per:  {label:"Rx PER", head:["Sensitivity (dBm)","PER\nUpper limit\n(%)"],
+         vals:r => [r.params.sensitivity_dbm, limOf(r,"PER").usl]},
+  tp:   {head:["RSSI\n(dBm)","RSSI lower limit\n(dBm)","RSSI upper limit\n(dBm)","Throughput\nlower limit\n(Mbps)"],
+         vals:r => [r.params.rssi_dbm, limOf(r,"RSSI").lsl, limOf(r,"RSSI").usl, limOf(r,"Throughput").lsl]}
+};
+// 範本的寫法：IEEE 802.11 欄 EHT20／11b，Rate 欄 EHT MCS13／MCS0 NSS1／11M
+const xlMode = r => LEGACY.includes(r.mode) ? r.mode : `${r.mode}${r.bandwidth_mhz}`;
+const xlRate = r => LEGACY.includes(r.mode) || r.rate === "auto" ? r.rate
+  : `${["HE","EHT"].includes(r.mode) ? r.mode + " " : ""}${r.rate}${r.nss ? " NSS" + r.nss : ""}`;
+const colName = n => { let s = ""; for (n++; n; n = Math.floor((n-1)/26)) s = String.fromCharCode(65 + (n-1) % 26) + s; return s; };
+const xmlEsc = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+// 一張工作表：cells[列][欄] = {v, s}，merges = ["B3:B5", …]；列、欄都從 0 起算
+function xlSheet(){
+  const cells = [], merges = [];
+  return { cells, merges,
+    set(r, c, v, s){ (cells[r] ??= [])[c] = {v, s}; },
+    merge(r1, c1, r2, c2){ if (r1 !== r2 || c1 !== c2) merges.push(`${colName(c1)}${r1+1}:${colName(c2)}${r2+1}`); } };
+}
+// 樣式編號：1 標題、2 表頭、3 一般格、4 區塊名稱
+function sheetXml(sh, widths){
+  const rows = sh.cells.map((row, r) => row ? `<row r="${r+1}">` + row.map((c, j) => {
+    if (!c) return "";
+    const ref = `${colName(j)}${r+1}`, st = c.s ? ` s="${c.s}"` : "";
+    if (c.v === "" || c.v == null) return `<c r="${ref}"${st}/>`;
+    return typeof c.v === "number" ? `<c r="${ref}"${st}><v>${c.v}</v></c>`
+      : `<c r="${ref}"${st} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(c.v)}</t></is></c>`;
+  }).join("") + `</row>` : "").join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<cols>${widths.map((w,i) => `<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("")}</cols>
+<sheetData>${rows}</sheetData>${sh.merges.length ? `<mergeCells count="${sh.merges.length}">${sh.merges.map(m => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : ""}
+</worksheet>`;
+}
+const XL_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/></patternFill></fill></fills>
+<borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+
+// 一個頻段頁（或 Throughput 頁）：有資料的區塊依序往下排，區塊之間空一列
+function bandSheet(title, rows, keys){
+  const sh = xlSheet(); let r = 0;
+  sh.set(r, 1, title, 1); r += 2;
+  for (const key of keys) {
+    const list = rows.filter(x => x.test_key === key); if (!list.length) continue;
+    const sec = XL_SECTIONS[key], two = sec.head.some(Array.isArray), h = two ? 2 : 1;
+    // 表頭：兩層的上層橫向合併；單層的在兩層區塊裡上下合併
+    let c = 1;
+    for (const t of [...XL_COMMON, ...sec.head]) {
+      if (Array.isArray(t)) {
+        sh.set(r, c, t[0], 2);
+        t[1].forEach((sub, k) => { if (k) sh.set(r, c + k, "", 2); sh.set(r + 1, c + k, sub, 2); });
+        sh.merge(r, c, r, c + t[1].length - 1); c += t[1].length;
+      } else {
+        sh.set(r, c, t, 2); if (two) sh.set(r + 1, c, "", 2);
+        sh.merge(r, c, r + h - 1, c); c++;
+      }
+    }
+    r += h;
+    // 資料列：一個頻道一列（Throughput 是一個方向一列）；test item 欄整塊合併
+    const label = sec.label ?? list[0].test;
+    list.forEach((x, i) => {
+      const vals = [key === "tp" ? (x.direction === "TX" ? "Tx" : "Rx") : (i ? "" : label), xlMode(x), x.channel, x.freq_mhz, xlRate(x),
+        ...[0,1,2,3].map(k => x.chains.includes(k) ? "V" : ""), ...sec.vals(x)];
+      vals.forEach((v, j) => sh.set(r + i, 1 + j, v ?? "", j === 0 ? 4 : 3));
+    });
+    if (key !== "tp") sh.merge(r, 1, r + list.length - 1, 1);
+    r += list.length + 1;
+  }
+  return sh;
+}
+function buildXlsx(o){
+  const sheets = [];
+  const cv = xlSheet();
+  cv.set(0, 1, "RF MFG Request", 1);
+  [["Project", o.project], ["Revision", o.revision], ["RD", o.rd], ["Date", o.date], ["Band", o.bands.join(" / ")]]
+    .forEach(([k, v], i) => { cv.set(i + 2, 1, k, 2); cv.set(i + 2, 2, v || "", 3); });
+  sheets.push(["Cover", sheetXml(cv, [3, 14, 30])]);
+  const w = [3, 26, 12, 9, 11, 16, 8, 8, 8, 8, 12, 12, 12, 12, 12, 12, 12];
+  for (const b of BAND_KEYS) {
+    const rows = o.rows.filter(x => x.band === b && x.test_key !== "tp");
+    if (rows.length) sheets.push([b, sheetXml(bandSheet(`${o.project || ""} RF MFG Request - ${b}`.trim(), rows, ["cal","bf","rxcal","tx","per"]), w)]);
+  }
+  const tp = o.rows.filter(x => x.test_key === "tp");
+  if (tp.length) sheets.push(["Throughput", sheetXml(bandSheet("Throughput", tp, ["tp"]), w)]);
+  const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const NS = "http://schemas.openxmlformats.org", REL = `${NS}/officeDocument/2006/relationships`;
+  const files = [
+    {name:"[Content_Types].xml", data:X + `<Types xmlns="${NS}/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>`
+      + sheets.map((_,i) => `<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("") + `</Types>`},
+    {name:"_rels/.rels", data:X + `<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:"xl/workbook.xml", data:X + `<workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${REL}"><sheets>`
+      + sheets.map(([n],i) => `<sheet name="${xmlEsc(n)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join("") + `</sheets></workbook>`},
+    {name:"xl/_rels/workbook.xml.rels", data:X + `<Relationships xmlns="${NS}/package/2006/relationships">`
+      + sheets.map((_,i) => `<Relationship Id="rId${i+1}" Type="${REL}/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join("")
+      + `<Relationship Id="rId${sheets.length+1}" Type="${REL}/styles" Target="styles.xml"/></Relationships>`},
+    {name:"xl/styles.xml", data:XL_STYLES},
+    ...sheets.map(([,xml], i) => ({name:`xl/worksheets/sheet${i+1}.xml`, data:xml}))
+  ];
+  return zipBytes(makeZip(files));
 }
 const esc = t => t.replace(/&/g,"&amp;").replace(/</g,"&lt;");
 function download(name, text, type){
@@ -569,27 +706,15 @@ const fmt = n => String(+Number(n).toFixed(3));
 const powerLim = r => r.limits.find(l => l.item === "Power");
 const LEGACY = ["11a","11b","11g"];
 const isTx = r => r.test_key === "tx", isRx = r => r.test_key === "per", isCal = r => r.test_key === "cal";
-// 給 MT 的提醒只寫「MT 光看檔案看不出來」的事：RD 有要求但檔案沒帶到、或網頁推測的寫法
-// （校正怎麼設、QCA 指令、INSTANCE、BF／Throughput 在其他站測，這些 MT 本來就知道，不寫）
-const rangeText = l => l.lsl != null && l.usl != null ? `${fmt(l.lsl)} ~ ${fmt(l.usl)} ${l.unit}`
-  : l.usl != null ? `≤ ${fmt(l.usl)} ${l.unit}` : `≥ ${fmt(l.lsl)} ${l.unit}`;
-const condOf = r => `${r.band} ${r.mode}${LEGACY.includes(r.mode) ? "" : r.bandwidth_mhz} ${r.rate}`;
-function commonNotes(o, unsupported, limitFile, sensInLimit){
+// 給 MT 的提醒只寫網頁推測的寫法、沒寫進測項檔的項目
+// （RD 要求的規格數字都在需求表.xlsx，MT 照以前的方式自己改 LIMIT 檔）
+function commonNotes(o, unsupported){
   const notes = [];
   for (const [key, why] of unsupported) {
     const t = [...new Set(o.rows.filter(r => r.test_key === key).map(r => `${r.band} ${r.test}`))];
     if (t.length) notes.push(`${t.join("、")}：${why}`);
   }
   if (o.rows.some(r => (isTx(r)||isRx(r)) && r.nss > 1)) notes.push("範例沒有 NSS 寫法，NSS 2 以上的點目前照 1 輸出");
-  // RD 要求、但測項檔放不下的規格：同一個要求合併，後面列出適用的條件
-  const want = new Map(), add = (k, r) => { if (!want.has(k)) want.set(k, new Set()); want.get(k).add(condOf(r)); };
-  o.rows.filter(isTx).forEach(r => r.limits.filter(l => l.item !== "Power").forEach(l => add(`${l.item} ${rangeText(l)}`, r)));
-  o.rows.filter(isRx).forEach(r => {
-    if (sensInLimit) add(`Sensitivity ${fmt(r.params.sensitivity_dbm)} dBm`, r);
-    r.limits.forEach(l => add(`${l.item} ${rangeText(l)}`, r));
-  });
-  if (want.size) notes.push(`RD 要求的以下規格沒有寫進這份檔案，機台會用 ${limitFile} 裡的值，請確認是否一致：`
-    + [...want].map(([k, c]) => `${CRLF}   - ${k}（${[...c].join("、")}）`).join(""));
   return notes;
 }
 
@@ -601,13 +726,8 @@ const ATS_11B = {"1M":"DSSS-1", "2M":"DSSS-2", "5.5M":"CCK-5_5", "11M":"CCK-11"}
 const atsRate = r => r.mode === "11b" ? ATS_11B[r.rate] : LEGACY.includes(r.mode) ? "OFDM-" + r.rate.replace("M","") : r.rate;
 function toATSuite(o){
   const L = ["TEST_ITEM,BANDWIDTH,RATE,FREQ_MHZ,POWER,POWER_LEVEL,ANT,FORMAT,PWR_UP_TOLERANCE,PWR_LOW_TOLERANCE,SAMPLING_TIME"];
-  const notes = commonNotes(o, [["rxcal","範例沒有對應的寫法，沒有寫進這份檔案"]], "Test_Limit.txt");
-  const cal = o.rows.filter(isCal);
-  if (cal.length) {
-    L.push("WIFI_CAL,NULL,NULL,NULL,Default,NULL,NULL,NULL,NULL,NULL,100");
-    notes.push("RD 要求的校正點（test_item.csv 裡只有一行 WIFI_CAL，看不到這些數字）："
-      + cal.map(r => `${CRLF}   - ${condOf(r)} ${r.freq_mhz} MHz，Target ${fmt(r.params.target_power_dbm)} dBm（${rangeText(powerLim(r).relative ? {...powerLim(r).relative, unit:"dB"} : powerLim(r))}）`).join(""));
-  }
+  const notes = commonNotes(o, [["rxcal","範例沒有對應的寫法，沒有寫進這份檔案"]]);
+  if (o.rows.some(isCal)) L.push("WIFI_CAL,NULL,NULL,NULL,Default,NULL,NULL,NULL,NULL,NULL,100");
   const guessed = [...new Set(o.rows.filter(r=>isTx(r)||isRx(r)).map(r=>r.mode))].filter(m => m !== "HE" && m !== "EHT");   // EHT 照 Test_Limit.txt 的 EHTMU
   if (guessed.length) notes.push(`FORMAT 只有 HE_SU 有範例，${guessed.map(m=>`${m}→${ATS_FORMAT[m]}`).join("、")} 是推測，待確認`);
   if (o.rows.some(r => (isTx(r)||isRx(r)) && r.mode === "11b")) notes.push("11b 的 RATE（DSSS-1、CCK-11…）照 Test_Limit.txt 的列名推測，待確認");
@@ -629,7 +749,7 @@ const WT_PREFIX = {HT:"HT", VHT:"AC", HE:"AX", EHT:"BE"};
 const WT_INSTANCE = {"2.4G":[0,0], "5G":[1,65]};
 const wtRate = r => LEGACY.includes(r.mode) ? r.rate : `${WT_PREFIX[r.mode]}${r.bandwidth_mhz}-${r.rate}`;
 function toITest(o){
-  const notes = commonNotes(o, [["rxcal","可能對應 WT_QCA_CAL_RX_FW（待確認），沒有寫進這份檔案"]], "WT_WIFI_LIMIT.txt", true);
+  const notes = commonNotes(o, [["rxcal","可能對應 WT_QCA_CAL_RX_FW（待確認），沒有寫進這份檔案"]]);
   const L = [`// RF 測試需求轉出：${[o.project,o.revision,o.rd,o.date].filter(Boolean).join(" / ")}`, "", "WT_CONNECT_TESTER", ""];
   const used = BAND_KEYS.filter(b => o.rows.some(r => r.band === b && (isCal(r)||isTx(r)||isRx(r))));
   let noPwr = false;
