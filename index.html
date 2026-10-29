@@ -365,8 +365,8 @@ const opts = (list, curV) => list.map(x=>`<option value="${x}"${x==curV?" select
 // 開啟舊檔後的通知（不存檔，按 × 關掉）
 function renderNotice(){
   const n = ui.notice;
-  $("notice").innerHTML = !n ? "" : `<div class="notice${n.warn.length ? " warn" : ""}"><div class="body">${esc(n.info)}${n.warn.length
-    ? `<div style="margin-top:6px"><b>${esc(n.warn[0])}</b><ul>${n.warn.slice(1).map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}</div>
+  $("notice").innerHTML = !n ? "" : `<div class="notice warn"><div class="body"><b>${esc(n[0])}</b>
+    <ul>${n.slice(1).map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>
     <button class="x" id="notice-x" title="關閉通知">×</button></div>`;
   if (n) $("notice-x").onclick = () => { ui.notice = null; renderNotice(); };
 }
@@ -1000,8 +1000,8 @@ $("f-open").onchange = async e => {
     state = st; ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {};
     band = BAND_KEYS.find(b => pagesIn(b).some(p => !untouched(p))) || BAND_KEYS[0];
     cur = "overview"; syncMeta(); update(true);
-    ui.notice = {info:`已開啟 ${st.meta.project || "舊檔"} ${oldRev}。版次已改成 ${st.meta.rev || "（請自行填寫）"}、日期改成今天，請在「改版說明」寫下這次改了什麼。`,
-                 warn:legacyOne ? ["這是舊版網頁下載的檔案，已盡量還原，以下幾點請確認：", ...legacyOne.notes] : []};
+    // 只有舊版檔案、有猜不準的地方才出通知
+    ui.notice = legacyOne && legacyOne.notes.length ? ["這是舊版網頁下載的檔案，已盡量還原，以下幾點請確認：", ...legacyOne.notes] : null;
     renderNotice();
   } catch (err) { alert("無法開啟：" + err.message); }
 };
