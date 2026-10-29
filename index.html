@@ -471,29 +471,61 @@ function renderOverview(){
     <div class="step"><div class="tbl-wrap"><table>
       <thead><tr><th>測項</th><th class="nw">條件</th><th>規格</th><th class="nw">頻道</th><th class="nw">點數</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <div class="step">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <button class="btn primary" id="b-export">下載中介格式 JSON</button>      </div>
+      <div class="sm" style="color:var(--muted)">下載的壓縮檔解開是資料夾 <b class="mono">${esc(packName())}</b>，裡面有 JSON 和該儀器的測項檔</div>
       <div class="exp">${EXPORTERS.map(x=>{ const r = x.conv(o); return `<div class="exp-card">
         <h4>${x.name}</h4><div class="sm">${x.desc}</div>
-        <button class="btn" data-exp="${x.key}">下載 ${x.file}</button>
+        <button class="btn primary" data-exp="${x.key}">下載（${x.file}＋JSON）</button>
         ${r.notes.length?`<ul class="notes">${r.notes.map(n=>`<li>${n}</li>`).join("")}</ul>`:""}</div>`; }).join("")}</div>
       <details style="margin-top:14px"><summary>逐點明細</summary><div class="tbl-wrap" style="margin-top:8px">${detailTables()}</div></details>
       <details style="margin-top:10px"><summary>JSON 預覽</summary><div class="code mono">${esc(JSON.stringify(o, null, 2))}</div></details>
       ${EXPORTERS.map(x=>`<details style="margin-top:10px"><summary>${x.file} 預覽</summary><div class="code mono">${esc(x.conv(o).text)}</div></details>`).join("")}
     </div>`;
   const okToGo = () => !errs.length || confirm(`還有 ${errs.length} 個問題，仍要下載？`);
-  $("b-export").onclick = () => {
-    if (okToGo()) download(`${o.project||"project"}_${o.revision||""}_RFreq.json`, JSON.stringify(o,null,2), "application/json");
-  };
+  // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）
   $("main").querySelectorAll("[data-exp]").forEach(b => b.onclick = () => {
-    const x = EXPORTERS.find(e => e.key === b.dataset.exp);
-    if (okToGo()) download(x.file, x.conv(o).text, "text/plain");
+    if (!okToGo()) return;
+    const x = EXPORTERS.find(e => e.key === b.dataset.exp), name = packName();
+    const zip = makeZip([
+      {name:`${name}/`, data:""},
+      {name:`${name}/${name}_RFreq.json`, data:JSON.stringify(o,null,2)},
+      {name:`${name}/${x.file}`, data:x.conv(o).text}]);
+    download(`${name}.zip`, zip, "application/zip");
   });
+}
+// 資料夾名：Project_Revision_姓名；空白用「未填」，去掉檔名不能用的字元
+function packName(){
+  const m = state.meta, part = (v, empty) => (String(v||"").trim() || empty).replace(/[\\/:*?"<>|]/g, "-");
+  return [part(m.project,"未填Project"), part(m.rev,"未填版次"), part(m.rd,"未填姓名")].join("_");
+}
+// 不壓縮的 zip（store），檔名用 UTF-8，中文名稱才不會亂碼
+const CRC_T = Array.from({length:256}, (_,n) => { let c = n; for (let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; return c>>>0; });
+const crc32 = b => { let c = 0xFFFFFFFF; for (const x of b) c = CRC_T[(c^x)&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; };
+function makeZip(files){
+  const enc = new TextEncoder(), parts = [], dir = [];
+  const d = new Date(), time = d.getHours()<<11 | d.getMinutes()<<5 | d.getSeconds()>>1,
+        date = (d.getFullYear()-1980)<<9 | (d.getMonth()+1)<<5 | d.getDate();
+  let off = 0;
+  for (const f of files) {
+    const nm = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    [[0,0x04034b50,4],[4,20,2],[6,0x0800,2],[8,0,2],[10,time,2],[12,date,2],[14,crc,4],[18,data.length,4],[22,data.length,4],[26,nm.length,2],[28,0,2]]
+      .forEach(([i,v,n]) => n===4 ? h.setUint32(i,v,true) : h.setUint16(i,v,true));
+    parts.push(h, nm, data);
+    const c = new DataView(new ArrayBuffer(46));
+    [[0,0x02014b50,4],[4,20,2],[6,20,2],[8,0x0800,2],[10,0,2],[12,time,2],[14,date,2],[16,crc,4],[20,data.length,4],[24,data.length,4],[28,nm.length,2],[30,0,2],[32,0,2],[34,0,2],[36,0,2],[38,f.name.endsWith("/")?16:0,4],[42,off,4]]
+      .forEach(([i,v,n]) => n===4 ? c.setUint32(i,v,true) : c.setUint16(i,v,true));
+    dir.push(c, nm);
+    off += 30 + nm.length + data.length;
+  }
+  const size = dir.reduce((a,x) => a + x.byteLength, 0), e = new DataView(new ArrayBuffer(22));
+  [[0,0x06054b50,4],[4,0,2],[6,0,2],[8,files.length,2],[10,files.length,2],[12,size,4],[16,off,4],[20,0,2]]
+    .forEach(([i,v,n]) => n===4 ? e.setUint32(i,v,true) : e.setUint16(i,v,true));
+  return [...parts, ...dir, e];
 }
 const esc = t => t.replace(/&/g,"&amp;").replace(/</g,"&lt;");
 function download(name, text, type){
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text],{type}));
+  a.href = URL.createObjectURL(new Blob(Array.isArray(text) ? text : [text],{type}));
   a.download = name; a.click();
 }
 function detailTables(){
@@ -718,6 +750,7 @@ function load(){
 }
 
 state = load() || blankState();
+state.meta.date = today();   // 每次打開都帶當天日期（草稿裡存的是上次的日期）
 syncMeta(); renderSide(); renderMain();
 </script>
 </body>
