@@ -43,6 +43,7 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .side-t:first-child{margin-top:0}
 .item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:10px;padding:9px 12px;cursor:pointer;color:var(--ink)}
 .item:hover{background:var(--card)}
+.item.sub{padding-left:30px}
 .item.on{background:var(--card);border-color:var(--line);box-shadow:0 1px 3px rgba(20,30,60,.06)}
 .item .ic{width:20px;height:20px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700}
 .ic.todo{border:2px solid var(--line);}
@@ -118,6 +119,8 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 @media (max-width:820px){.picker,.ov{margin-left:0}}
 
 .pager{display:flex;justify-content:space-between;margin-top:18px}
+.grp-tools{display:flex;gap:16px;margin-top:6px}
+.link.danger{color:var(--err)}
 
 
 /* 總覽 */
@@ -281,7 +284,19 @@ function lim(item,unit,lsl,usl,rel){ const o={item,unit,lsl,usl}; if(rel) o.rela
 /* ---------- 狀態 ---------- */
 // 所有頁：每個頻段各一套（頻段測項 + Throughput）
 // 範本裡某些頻段沒有的測項（noBands）不開頁
-const PAGES = BAND_KEYS.flatMap(band => SECTIONS.filter(s => !s.noBands?.includes(band)).map(s => pidOf(band, s.key)));
+const BASE_PAGES = BAND_KEYS.flatMap(band => SECTIONS.filter(s => !s.noBands?.includes(band)).map(s => pidOf(band, s.key)));
+// 同一個測項可以有好幾組條件（例：2.4G 校正同時有 11b 11M 和 EHT MCS13）；第 2 組起 id 是 "2.4G|cal|2"
+const baseOf = pid => pid.split("|").slice(0, 2).join("|");
+const isGroupId = k => BASE_PAGES.includes(baseOf(k)) && (k === baseOf(k) || /^[2-9]\d*$|^1\d+$/.test(k.split("|")[2] ?? ""));
+let PAGES = BASE_PAGES;
+// 依目前的表單重算頁面清單：每個測項後面接它的第 2、3…組
+function refreshPages(){
+  PAGES = BASE_PAGES.flatMap(b => [b, ...Object.keys(state.sec).filter(k => k !== b && baseOf(k) === b && isGroupId(k))
+    .sort((x, y) => Number(x.split("|")[2]) - Number(y.split("|")[2]))]);
+}
+const groupsOf = pid => PAGES.filter(p => baseOf(p) === baseOf(pid));
+const groupNo = pid => groupsOf(pid).indexOf(pid) + 1;
+const pageName = pid => titleOf(pid) + (groupsOf(pid).length > 1 ? `（第 ${groupNo(pid)} 組）` : "");
 const pagesIn = band => PAGES.filter(p => bandOf(p) === band);
 const titleOf = pid => secOf(pid).titles?.[bandOf(pid)] ?? secOf(pid).title;
 function blankSec(pid, o={}){
@@ -299,7 +314,7 @@ function today(){
 }
 function blankState(){
   return {meta:{project:"",rd:"",date:today(),rev:"R0A"},
-          sec:Object.fromEntries(PAGES.map(p=>[p,blankSec(p)]))};
+          sec:Object.fromEntries(BASE_PAGES.map(p=>[p,blankSec(p)]))};
 }
 let state = blankState();
 let band = "5G";                 // 左側目前看的頻段
@@ -381,8 +396,8 @@ function renderSide(){
   const item = pid => {
     const s = secOf(pid), n = pointsOf(pid).length, e = validate(pid).errs.length, u = untouched(pid);
     const ic = u ? `<span class="ic todo"></span>` : e ? `<span class="ic bad">!</span>` : `<span class="ic ok">✓</span>`;
-    return `<button class="item${cur===pid?" on":""}" data-go="${pid}">${ic}
-      <span class="nm">${titleOf(pid)}<small>${u?"未填（不測）":e?`${e} 個問題`:s.desc}</small></span>
+    return `<button class="item${cur===pid?" on":""}${pid !== baseOf(pid) ? " sub" : ""}" data-go="${pid}">${ic}
+      <span class="nm">${pid !== baseOf(pid) ? `第 ${groupNo(pid)} 組 · ${esc(state.sec[pid].mode)} ${esc(state.sec[pid].rate)}` : pageName(pid)}<small>${u?"未填（不測）":e?`${e} 個問題`:s.desc}</small></span>
       <span class="n">${u?"":n}</span></button>`;
   };
   const cnt = b => pagesIn(b).reduce((a,p)=>a+pointsOf(p).length,0);
@@ -411,7 +426,8 @@ function renderMain(){
   const pid = cur, s = secOf(pid), d = state.sec[pid];
   const list = pagesIn(band), idx = list.indexOf(pid), prev = list[idx-1], next = list[idx+1];
   $("main").innerHTML = `
-    <div class="page-h"><h2>${titleOf(pid)}<span class="tag" style="margin-left:8px;vertical-align:middle">${d.band}</span></h2><p>${s.desc}</p></div>
+    <div class="page-h"><h2>${titleOf(pid)}<span class="tag" style="margin-left:8px;vertical-align:middle">${d.band}</span>${groupsOf(pid).length > 1 ? `<span class="tag" style="margin-left:6px;vertical-align:middle">第 ${groupNo(pid)} 組</span>` : ""}</h2><p>${s.desc}</p>
+      <div class="grp-tools"><button class="link" data-addgroup title="同一個測項要用不同的 Mode／Rate／NSS／Chain 時，新增一組">＋ 新增一組條件（不同 Mode／Rate）</button>${pid !== baseOf(pid) ? `<button class="link danger" data-delgroup>刪除這一組</button>` : ""}</div></div>
 
     <div class="step"><div class="step-t"><span class="no">1</span><h3>測試條件</h3></div>
       <div class="fields">
@@ -434,8 +450,8 @@ function renderMain(){
     </div>
 
     <div class="pager">
-      <span>${prev?`<button class="btn" data-go="${prev}">← ${titleOf(prev)}</button>`:""}</span>
-      <button class="btn primary" data-go="${next||"overview"}">${next?titleOf(next):"總覽／匯出"} →</button>
+      <span>${prev?`<button class="btn" data-go="${prev}">← ${pageName(prev)}</button>`:""}</span>
+      <button class="btn primary" data-go="${next||"overview"}">${next?pageName(next):"總覽／匯出"} →</button>
     </div>`;
   paintMain();
 }
@@ -472,13 +488,13 @@ function specSummary(s, v){
 }
 function renderOverview(){
   const errs = [];
-  PAGES.forEach(p => validate(p).errs.forEach(e => errs.push(`${bandOf(p)} ${titleOf(p)}：${e}`)));
+  PAGES.forEach(p => validate(p).errs.forEach(e => errs.push(`${bandOf(p)} ${pageName(p)}：${e}`)));
   const row = p => {
     const s = secOf(p), d = state.sec[p];
-    if (untouched(p)) return `<tr><td><b>${titleOf(p)}</b></td><td colspan="4" class="sm">未填（不測）</td></tr>`;
+    if (untouched(p)) return `<tr><td><b>${pageName(p)}</b></td><td colspan="4" class="sm">未填（不測）</td></tr>`;
     const bws = usedBws(d);
     const ov = bws.filter(b=>ovCount(d,b)).map(b=>`${b}M：`+Object.entries(d.bw[b].ov).filter(([,x])=>x!=="").map(([k,x])=>`${s.fields.find(f=>f.k===k).label} ${esc(x)}`).join("、"));
-    return `<tr><td><b>${titleOf(p)}</b><div class="sm">${s.desc}</div></td>
+    return `<tr><td><b>${pageName(p)}</b><div class="sm">${s.desc}</div></td>
       <td class="nw">${s.dir?["TX","RX"].filter(x=>d.dirs[x]).join("/")+" · ":""}${esc(d.mode)} · ${esc(d.rate)}${nssOn(d)?" · NSS"+esc(d.nss):""}<div class="sm">Chain ${chainsOf(d).join(",")}</div></td>
       <td>${specSummary(s,d.v)}${ov.length?`<div class="sm" style="color:var(--warn)">例外 ${ov.join("；")}</div>`:""}${hiddenNote(d)?`<div class="sm" style="color:var(--warn)">⚠ ${esc(hiddenNote(d))}</div>`:""}</td>
       <td class="nw">${bws.map(b=>`<div class="chline"><b>${b}M</b>${esc([...d.bw[b].chs].sort((x,y)=>x-y).join("  "))}</div>`).join("")}</td>
@@ -705,7 +721,7 @@ function download(name, text, type){
 function detailTables(){
   return PAGES.filter(p=>!untouched(p)).map(p => {
     const s = secOf(p), d = state.sec[p];
-    return `<div style="margin:10px 0 4px;font-weight:700">${d.band} · ${titleOf(p)}</div><table class="detail"><thead><tr><th>#</th>${s.dir?"<th>方向</th>":""}<th>BW</th><th>Ch</th><th>Freq</th>
+    return `<div style="margin:10px 0 4px;font-weight:700">${d.band} · ${pageName(p)}</div><table class="detail"><thead><tr><th>#</th>${s.dir?"<th>方向</th>":""}<th>BW</th><th>Ch</th><th>Freq</th>
       ${s.fields.map(f=>`<th>${f.label}</th>`).join("")}</tr></thead><tbody>
       ${pointsOf(p).map((t,i)=>`<tr><td>${i+1}</td>${s.dir?`<td>${t.dir}</td>`:""}<td>${t.b}</td><td>${esc(t.ch)}</td><td>${esc(freqOf(d.band,t.ch))}</td>
         ${s.fields.map(f=>`<td class="${isOv(d,t.b,f.k)?"o":""}">${t.v[f.k]===""?"—":esc(t.v[f.k])}</td>`).join("")}</tr>`).join("")}
@@ -715,13 +731,13 @@ function detailTables(){
 
 /* ---------- 中介格式（一列一個測試點） ---------- */
 function buildOutput(){
-  const out = [];
+  const out = [], seq = {};
   for (const pid of PAGES) {
     const s = secOf(pid), d = state.sec[pid];
-    pointsOf(pid).forEach((p,i) => {
-      const o = s.out(p.v);
+    pointsOf(pid).forEach(p => {
+      const o = s.out(p.v), n = seq[baseOf(pid)] = (seq[baseOf(pid)] || 0) + 1;
       out.push({
-        id:`${d.band}-${s.key.toUpperCase()}-${String(i+1).padStart(3,"0")}`,
+        id:`${d.band}-${s.key.toUpperCase()}-${String(n).padStart(3,"0")}`, group:groupNo(pid),
         band:d.band, test_key:s.key, test:titleOf(pid), stage:s.stage, path:s.path, ...(s.dir?{direction:p.dir}:{}),
         mode:d.mode, bandwidth_mhz:p.b, channel:p.ch, freq_mhz:freqOf(d.band,p.ch),
         rate:d.rate, nss:nssOn(d)?Number(d.nss):null, chains:chainsOf(d),
@@ -874,6 +890,17 @@ document.addEventListener("click", e => {
     renderSide(); renderMain(); window.scrollTo({top:0}); return;
   }
   if (cur==="overview") return;
+  if (t.hasAttribute("data-addgroup")) {
+    const b = baseOf(cur), n = Math.max(1, ...Object.keys(state.sec).filter(k => baseOf(k) === b && k !== b).map(k => Number(k.split("|")[2]))) + 1;
+    const id = `${b}|${n}`;
+    state.sec[id] = blankSec(id); refreshPages(); cur = id;
+    window.scrollTo({top:0}); return update(true);
+  }
+  if (t.hasAttribute("data-delgroup")) {
+    if (!confirm(`刪除「${pageName(cur)}」？這一組填的內容會一起刪掉。`)) return;
+    const gone = cur, list = groupsOf(cur); cur = list[list.indexOf(cur) - 1];
+    delete state.sec[gone]; refreshPages(); return update(true);
+  }
   const d = state.sec[cur];
   if (t.hasAttribute("data-dismiss")) ui.dismiss[cur] = hiddenNote(d);   // 記住關掉的是哪一則，內容變了會再出現
   else if (t.dataset.pick) { const k=`${cur}:${t.dataset.pick}`; ui.pick[k] = !ui.pick[k]; }
@@ -884,7 +911,7 @@ document.addEventListener("click", e => {
   update(true);
 });
 
-$("b-clear").onclick = () => { if (confirm("清空所有內容？")) { state = blankState(); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
+$("b-clear").onclick = () => { if (confirm("清空所有內容？")) { state = blankState(); refreshPages(); if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
 ["project","rd","date","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
   state.meta[k] = e.target.value; save();
   if (cur === "overview") renderOverview();   // 總覽頁標題跟著更新
@@ -918,8 +945,8 @@ const nextRev = r => /^(.*?)([A-Y])$/.test(r || "") ? r.slice(0, -1) + String.fr
 // 檔案裡的表單狀態逐欄檢查後才放回來（只收認得的欄位、合法的 Mode／Rate／頻道）
 function restoreDraft(dr){
   const st = blankState();
-  for (const pid of PAGES) {
-    const x = dr.sec?.[pid]; if (!x) continue;
+  for (const pid of Object.keys(dr.sec || {}).filter(isGroupId)) {
+    const x = dr.sec[pid]; if (!x) continue;
     const band = bandOf(pid), modes = BANDS[band].modes;
     const mode = modes[x.mode] ? x.mode : "EHT";
     const chs = {}, ov = {};
@@ -958,15 +985,19 @@ function legacyDraft(o){
     const key = String(r.id || "").split("-")[1]?.toLowerCase(), band = r.band || o.band;
     if (!BANDS[band]) { notes.push(`網頁目前沒有 ${band} 頁，舊檔裡 ${band} 的測項已略過`); continue; }
     if (!SEC[key]) { notes.push(`有一筆「${r.test || r.id}」認不出是哪個測項，已略過`); continue; }
-    if (!PAGES.includes(pidOf(band, key))) { notes.push(`網頁的 ${band} 沒有「${SEC[key].title}」，舊檔裡這項已略過`); continue; }
+    if (!BASE_PAGES.includes(pidOf(band, key))) { notes.push(`網頁的 ${band} 沒有「${SEC[key].title}」，舊檔裡這項已略過`); continue; }
     (groups[pidOf(band, key)] ??= []).push(r);
   }
-  const sec = {};
-  for (const [pid, rows] of Object.entries(groups)) {
-    const name = `${bandOf(pid)} ${titleOf(pid)}`, key = secOf(pid).key, first = rows[0];
+  const sec = {}, split = {};
+  for (const [base, all] of Object.entries(groups)) {
+    const by = new Map();
+    for (const r of all) { const sig = JSON.stringify([r.mode, r.rate, r.nss ?? 1, r.chains]); if (!by.has(sig)) by.set(sig, []); by.get(sig).push(r); }
+    [...by.values()].forEach((rows, i) => split[i ? `${base}|${i + 1}` : base] = rows);
+  }
+  for (const [pid, rows] of Object.entries(split)) {
+    const gn = Number(pid.split("|")[2] || 1);
+    const name = `${bandOf(pid)} ${titleOf(pid)}${split[`${baseOf(pid)}|2`] ? `（第 ${gn} 組）` : ""}`, key = secOf(pid).key, first = rows[0];
     const chains = [0,1,2,3].map(c => (first.chains || []).includes(c));
-    if (rows.some(r => r.mode !== first.mode || r.rate !== first.rate || !sameV(r.chains, first.chains) || (r.nss ?? 1) !== (first.nss ?? 1)))
-      notes.push(`${name}：舊檔裡 Mode／Rate／NSS／Chain 不是每一列都一樣，網頁一頁只能設一種，已用第一列的設定`);
     if (!BANDS[bandOf(pid)].modes[first.mode]) notes.push(`${name}：Mode「${first.mode}」在 ${bandOf(pid)} 不能用，已改成 EHT`);
     // 每個頻寬：頻道清單＋規格（同頻寬不同頻道的規格不一樣時只能留一個）
     const per = {};
@@ -1006,11 +1037,11 @@ $("f-open").onchange = async e => {
     const busy = state.meta.project || PAGES.some(p => !untouched(p));
     if (busy && !confirm("畫面上已經有填寫的內容，開啟舊檔會覆蓋掉，確定嗎？")) return;
     const {st, oldRev} = restoreDraft(legacyOne ? legacyOne.draft : o.draft);
-    state = st; ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {};
+    state = st; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {};
     band = BAND_KEYS.find(b => pagesIn(b).some(p => !untouched(p))) || BAND_KEYS[0];
     cur = "overview"; syncMeta(); update(true);
     // 舊版檔案有猜不準的地方、或檔案裡有網頁還沒支援的頻段（例如 6G），才出通知
-    const extra = legacyOne ? [] : Object.keys(o.draft.sec).filter(p => !PAGES.includes(p) && Object.values(o.draft.sec[p]?.bw || {}).some(b => b?.chs?.length));   // 空白的不算
+    const extra = legacyOne ? [] : Object.keys(o.draft.sec).filter(p => !isGroupId(p) && Object.values(o.draft.sec[p]?.bw || {}).some(b => b?.chs?.length));   // 空白的不算
     const skipped = [...new Set(extra.map(p => !BANDS[bandOf(p)] ? `網頁目前沒有 ${bandOf(p)} 頁，檔案裡 ${bandOf(p)} 的測項已略過`
       : SEC[p.split("|")[1]] ? `網頁的 ${bandOf(p)} 沒有「${SEC[p.split("|")[1]].title}」，檔案裡這項已略過` : null).filter(Boolean))];
     ui.notice = legacyOne && legacyOne.notes.length ? ["這是舊版網頁下載的檔案，已盡量還原，以下幾點請確認：", ...legacyOne.notes]
@@ -1024,8 +1055,8 @@ const KEY = "rf-req-draft-B-v2", OLD_KEY = "rf-req-5g-draft-B-v1";
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
 // 新增頻段／頻寬後，舊草稿缺的頁和頻寬補成空白
 function fillMissing(s){
-  for (const pid of PAGES) {
-    if (!s.sec[pid]) { s.sec[pid] = blankSec(pid); continue; }
+  for (const pid of BASE_PAGES) s.sec[pid] ??= blankSec(pid);
+  for (const pid of Object.keys(s.sec).filter(isGroupId)) {
     s.sec[pid].band = bandOf(pid);
     for (const b of BWS) s.sec[pid].bw[b] ??= {chs:[], ov:{}};
   }
@@ -1044,6 +1075,7 @@ function load(){
 }
 
 state = load() || blankState();
+refreshPages();
 state.meta.date = today();   // 每次打開都帶當天日期（草稿裡存的是上次的日期）
 const setHdr = () => document.documentElement.style.setProperty("--hdr", document.querySelector("header.top").offsetHeight + "px");
 window.addEventListener("resize", setHdr);
