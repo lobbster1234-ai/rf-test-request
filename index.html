@@ -189,8 +189,8 @@ const BANDS = {
     freq:ch => 5000 + ch * 5,
     modes:{"11a":[20], HT:[20,40], VHT:[20,40,80,160], HE:[20,40,80,160], EHT:[20,40,80,160]}},
   "6G":{
-    ch:{20:steps(1,233,4), 40:steps(3,227,8), 80:steps(7,215,16), 160:steps(15,207,32), 320:[31,63,95,127,159,191]},
-    freq:ch => 5950 + ch * 5,
+    ch:{20:[2, ...steps(1,233,4)], 40:steps(3,227,8), 80:steps(7,215,16), 160:steps(15,207,32), 320:[31,63,95,127,159,191]},
+    freq:ch => ch === 2 ? 5935 : 5950 + ch * 5,   // ch2（5935）是 6G 的特殊頻道，不照公式（範本 Freq 頁）
     modes:{"11a":[20], HT:[20,40], VHT:[20,40,80,160], HE:[20,40,80,160], EHT:[20,40,80,160,320]}}
 };
 function steps(a, b, d){ const r = []; for (let x = a; x <= b; x += d) r.push(x); return r; }
@@ -327,7 +327,7 @@ const ovCount = (d,b) => Object.values(d.bw[b].ov).filter(x=>x!==""&&x!=null).le
 function pointsOf(pid){
   const d = state.sec[pid], s = secOf(pid), pts = [];
   const dirs = s.dir ? ["TX","RX"].filter(x=>d.dirs[x]) : [null];
-  for (const b of usedBws(d)) for (const ch of [...d.bw[b].chs].sort((x,y)=>x-y)) for (const dir of dirs)
+  for (const b of usedBws(d)) for (const ch of [...d.bw[b].chs].sort((x,y)=>freqOf(d.band,x)-freqOf(d.band,y))) for (const dir of dirs)   // 照頻率排（6G ch2 比 ch1 低）
     pts.push({b, ch, dir, v:effV(d,b)});
   return pts;
 }
