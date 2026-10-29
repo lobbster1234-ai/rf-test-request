@@ -40,6 +40,7 @@ header.top h1{font-size:17px;margin:0}
 
 /* 左側清單 */
 nav.side{position:sticky;top:84px;align-self:start;display:flex;flex-direction:column;gap:4px}
+nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會一直貼在旁邊 */
 .side-t{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.05em;margin:12px 10px 4px}
 .side-t:first-child{margin-top:0}
 .item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:10px;padding:9px 12px;cursor:pointer;color:var(--ink)}
@@ -368,6 +369,7 @@ function renderSide(){
       <span class="nm">總覽／匯出<small>${errN?`還有 ${errN} 個問題`:"確認後下載"}</small></span></button>
     <div class="side-total">共 <b>${total}</b> 個測試點</div>`;
   $("h-band").textContent = BAND_KEYS.join("/");
+  $("side").classList.toggle("free", cur === "overview");
 }
 
 function fieldHtml(f, val, dataK, placeholder){
