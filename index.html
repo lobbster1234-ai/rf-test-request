@@ -345,6 +345,8 @@ function validate(pid){
 
 /* ---------- 畫面 ---------- */
 const $ = id => document.getElementById(id);
+// 使用者輸入（或瀏覽器草稿裡的值）放進畫面前一律轉成純文字，避免被當成網頁程式碼執行
+const esc = t => String(t ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const opts = (list, curV) => list.map(x=>`<option value="${x}"${x==curV?" selected":""}>${x}</option>`).join("");
 
 function renderSide(){
@@ -373,7 +375,7 @@ function renderSide(){
 function fieldHtml(f, val, dataK, placeholder){
   const ctl = f.type==="yn"
     ? `<select data-k="${dataK}">${placeholder!=null?`<option value="">同上</option>`:""}${opts(["Y","N"],val)}</select>`
-    : `<input type="number" step="any" data-k="${dataK}" value="${val ?? ""}"${placeholder?` placeholder="${placeholder}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}>`;
+    : `<input type="number" step="any" data-k="${dataK}" value="${esc(val)}"${placeholder?` placeholder="${esc(placeholder)}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}>`;
   return `<label class="fld">${f.label}<span class="in">${ctl}${f.unit?`<span class="u">${f.unit}</span>`:""}</span></label>`;
 }
 
@@ -400,7 +402,7 @@ function renderMain(){
       </div></div>
 
     <div class="step" data-k="chs"><div class="step-t"><span class="no">3</span><h3>頻道</h3><span class="hint">點一下那一行就能展開選頻道，頻率自動對應</span></div>
-      ${hiddenNote(d) && ui.dismiss[pid]!==hiddenNote(d)?`<div class="hidden-note"><span>⚠ ${hiddenNote(d)}</span><button class="x" data-dismiss title="關閉提示">×</button></div>`:""}
+      ${hiddenNote(d) && ui.dismiss[pid]!==hiddenNote(d)?`<div class="hidden-note"><span>⚠ ${esc(hiddenNote(d))}</span><button class="x" data-dismiss title="關閉提示">×</button></div>`:""}
       ${bwsOf(d.band,d.mode).map(b=>bwHtml(pid,b)).join("")}
     </div>
 
@@ -417,7 +419,7 @@ function bwHtml(pid, b){
   const n = ovCount(d,b);
   return `<div class="bw">
     <div class="bw-h" data-bwrow="${b}"><span class="arrow">${ui.pick[k]?"▾":"▸"}</span><span class="bw-name">${b} MHz</span>
-      <span class="picked">${picked.length?picked.map(c=>`<span class="tag" title="${freqOf(d.band,c)} MHz">${c}</span>`).join(""):`<span class="none">不測</span>`}</span>
+      <span class="picked">${picked.length?picked.map(c=>`<span class="tag" title="${esc(freqOf(d.band,c))} MHz">${esc(c)}</span>`).join(""):`<span class="none">不測</span>`}</span>
       <span class="bw-tools">
         <button class="link" data-pick="${b}">${ui.pick[k]?"收合":"選頻道"}</button>
         ${picked.length?`<button class="link" data-ov="${b}">${ui.ov[k]?"收合例外":"此頻寬規格不同"}${n?`<span class="ov-tag">已設 ${n} 項</span>`:""}</button>`:""}
@@ -439,7 +441,7 @@ function paintMain(){
 }
 
 function specSummary(s, v){
-  return s.fields.filter(f=>v[f.k]!=="" && f.type!=="yn").map(f=>`${f.label} ${v[f.k]}${f.unit?" "+f.unit:""}`).join("、");
+  return s.fields.filter(f=>v[f.k]!=="" && f.type!=="yn").map(f=>`${f.label} ${esc(v[f.k])}${f.unit?" "+f.unit:""}`).join("、");
 }
 function renderOverview(){
   const errs = [];
@@ -448,11 +450,11 @@ function renderOverview(){
     const s = secOf(p), d = state.sec[p];
     if (untouched(p)) return `<tr><td><b>${titleOf(p)}</b></td><td colspan="4" class="sm">未填（不測）</td></tr>`;
     const bws = usedBws(d);
-    const ov = bws.filter(b=>ovCount(d,b)).map(b=>`${b}M：`+Object.entries(d.bw[b].ov).filter(([,x])=>x!=="").map(([k,x])=>`${s.fields.find(f=>f.k===k).label} ${x}`).join("、"));
+    const ov = bws.filter(b=>ovCount(d,b)).map(b=>`${b}M：`+Object.entries(d.bw[b].ov).filter(([,x])=>x!=="").map(([k,x])=>`${s.fields.find(f=>f.k===k).label} ${esc(x)}`).join("、"));
     return `<tr><td><b>${titleOf(p)}</b><div class="sm">${s.desc}</div></td>
-      <td class="nw">${s.dir?["TX","RX"].filter(x=>d.dirs[x]).join("/")+" · ":""}${d.mode} · ${d.rate}${nssOn(d)?" · NSS"+d.nss:""}<div class="sm">Chain ${chainsOf(d).join(",")}</div></td>
-      <td>${specSummary(s,d.v)}${ov.length?`<div class="sm" style="color:var(--warn)">例外 ${ov.join("；")}</div>`:""}${hiddenNote(d)?`<div class="sm" style="color:var(--warn)">⚠ ${hiddenNote(d)}</div>`:""}</td>
-      <td class="nw">${bws.map(b=>`<div class="chline"><b>${b}M</b>${[...d.bw[b].chs].sort((x,y)=>x-y).join("  ")}</div>`).join("")}</td>
+      <td class="nw">${s.dir?["TX","RX"].filter(x=>d.dirs[x]).join("/")+" · ":""}${esc(d.mode)} · ${esc(d.rate)}${nssOn(d)?" · NSS"+esc(d.nss):""}<div class="sm">Chain ${chainsOf(d).join(",")}</div></td>
+      <td>${specSummary(s,d.v)}${ov.length?`<div class="sm" style="color:var(--warn)">例外 ${ov.join("；")}</div>`:""}${hiddenNote(d)?`<div class="sm" style="color:var(--warn)">⚠ ${esc(hiddenNote(d))}</div>`:""}</td>
+      <td class="nw">${bws.map(b=>`<div class="chline"><b>${b}M</b>${esc([...d.bw[b].chs].sort((x,y)=>x-y).join("  "))}</div>`).join("")}</td>
       <td class="mono">${pointsOf(p).length}</td></tr>`;
   };
   // 點頻段那一行就收合／展開
@@ -463,7 +465,7 @@ function renderOverview(){
   }).join("");
   const o = buildOutput();
   $("main").innerHTML = `
-    <div class="page-h"><h2>總覽／匯出</h2><p>${state.meta.project||"（未填 Project）"} · ${BAND_KEYS.join("/")} · ${state.meta.rev||""} · ${state.meta.rd||"（未填填寫人）"}</p></div>
+    <div class="page-h"><h2>總覽／匯出</h2><p>${esc(state.meta.project||"（未填 Project）")} · ${BAND_KEYS.join("/")} · ${esc(state.meta.rev)} · ${esc(state.meta.rd||"（未填填寫人）")}</p></div>
     ${errs.length?`<div class="step" style="border-color:#f1c2c2"><div class="step-t"><h3 style="color:var(--err)">還有 ${errs.length} 個問題</h3></div><ul class="errlist">${errs.map(e=>`<li>${e}</li>`).join("")}</ul></div>`:""}
     <div class="step"><div class="tbl-wrap"><table>
       <thead><tr><th>測項</th><th class="nw">條件</th><th>規格</th><th class="nw">頻道</th><th class="nw">點數</th></tr></thead><tbody>${rows}</tbody></table></div></div>
@@ -667,7 +669,6 @@ function buildXlsx(o){
   ];
   return zipBytes(makeZip(files));
 }
-const esc = t => t.replace(/&/g,"&amp;").replace(/</g,"&lt;");
 function download(name, text, type){
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(Array.isArray(text) ? text : [text],{type}));
@@ -678,8 +679,8 @@ function detailTables(){
     const s = secOf(p), d = state.sec[p];
     return `<div style="margin:10px 0 4px;font-weight:700">${d.band} · ${titleOf(p)}</div><table class="detail"><thead><tr><th>#</th>${s.dir?"<th>方向</th>":""}<th>BW</th><th>Ch</th><th>Freq</th>
       ${s.fields.map(f=>`<th>${f.label}</th>`).join("")}</tr></thead><tbody>
-      ${pointsOf(p).map((t,i)=>`<tr><td>${i+1}</td>${s.dir?`<td>${t.dir}</td>`:""}<td>${t.b}</td><td>${t.ch}</td><td>${freqOf(d.band,t.ch)}</td>
-        ${s.fields.map(f=>`<td class="${isOv(d,t.b,f.k)?"o":""}">${t.v[f.k]===""?"—":t.v[f.k]}</td>`).join("")}</tr>`).join("")}
+      ${pointsOf(p).map((t,i)=>`<tr><td>${i+1}</td>${s.dir?`<td>${t.dir}</td>`:""}<td>${t.b}</td><td>${esc(t.ch)}</td><td>${esc(freqOf(d.band,t.ch))}</td>
+        ${s.fields.map(f=>`<td class="${isOv(d,t.b,f.k)?"o":""}">${t.v[f.k]===""?"—":esc(t.v[f.k])}</td>`).join("")}</tr>`).join("")}
       </tbody></table>`;
   }).join("");
 }
