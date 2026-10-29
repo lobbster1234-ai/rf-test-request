@@ -567,8 +567,13 @@ function buildOutput(){
 const CRLF = "\r\n";
 const fmt = n => String(+Number(n).toFixed(3));
 const powerLim = r => r.limits.find(l => l.item === "Power");
+const LEGACY = ["11a","11b","11g"];
 const isTx = r => r.test_key === "tx", isRx = r => r.test_key === "per", isCal = r => r.test_key === "cal";
-// 共用提醒：範例裡沒有對應的測項、NSS、只能寫在 limit 檔的規格
+// 給 MT 的提醒只寫「MT 光看檔案看不出來」的事：RD 有要求但檔案沒帶到、或網頁推測的寫法
+// （校正怎麼設、QCA 指令、INSTANCE、BF／Throughput 在其他站測，這些 MT 本來就知道，不寫）
+const rangeText = l => l.lsl != null && l.usl != null ? `${fmt(l.lsl)} ~ ${fmt(l.usl)} ${l.unit}`
+  : l.usl != null ? `≤ ${fmt(l.usl)} ${l.unit}` : `≥ ${fmt(l.lsl)} ${l.unit}`;
+const condOf = r => `${r.band} ${r.mode}${LEGACY.includes(r.mode) ? "" : r.bandwidth_mhz} ${r.rate}`;
 function commonNotes(o, unsupported, limitFile, sensInLimit){
   const notes = [];
   for (const [key, why] of unsupported) {
@@ -576,15 +581,17 @@ function commonNotes(o, unsupported, limitFile, sensInLimit){
     if (t.length) notes.push(`${t.join("、")}：${why}`);
   }
   if (o.rows.some(r => (isTx(r)||isRx(r)) && r.nss > 1)) notes.push("範例沒有 NSS 寫法，NSS 2 以上的點目前照 1 輸出");
-  const extra = new Set();
-  o.rows.filter(isTx).forEach(r => r.limits.filter(l => l.item !== "Power").forEach(l => extra.add(l.item)));
-  if (o.rows.some(isRx)) { if (sensInLimit) extra.add("Sensitivity"); extra.add("PER 上限"); }
-  if (extra.size) notes.push(`${[...extra].join("、")} 要寫在 ${limitFile}，目前用儀器預設值`);
+  // RD 要求、但測項檔放不下的規格：同一個要求合併，後面列出適用的條件
+  const want = new Map(), add = (k, r) => { if (!want.has(k)) want.set(k, new Set()); want.get(k).add(condOf(r)); };
+  o.rows.filter(isTx).forEach(r => r.limits.filter(l => l.item !== "Power").forEach(l => add(`${l.item} ${rangeText(l)}`, r)));
+  o.rows.filter(isRx).forEach(r => {
+    if (sensInLimit) add(`Sensitivity ${fmt(r.params.sensitivity_dbm)} dBm`, r);
+    r.limits.forEach(l => add(`${l.item} ${rangeText(l)}`, r));
+  });
+  if (want.size) notes.push(`RD 要求的以下規格沒有寫進這份檔案，機台會用 ${limitFile} 裡的值，請確認是否一致：`
+    + [...want].map(([k, c]) => `${CRLF}   - ${k}（${[...c].join("、")}）`).join(""));
   return notes;
 }
-const LEGACY = ["11a","11b","11g"];
-// BF、Throughput 不在筑波／iTest 機台上測，在其他站測
-const OTHER_STATION = "此項目在其他站測，不寫進這份檔案";
 
 // 筑波 ATSuite：test_item.csv，一天線一列，ANT_1 起算
 // FORMAT 只有 HE_SU 有範例；EHT_MU 照 Test_Limit.txt 只有 EHTMU 推得；11b 的 DSSS 也是照 Test_Limit.txt 推的
@@ -592,20 +599,14 @@ const ATS_FORMAT = {"11b":"DSSS", "11g":"NON_HT", "11a":"NON_HT", HT:"HT", VHT:"
 // 11b 的 RATE 照 Test_Limit.txt 的列名
 const ATS_11B = {"1M":"DSSS-1", "2M":"DSSS-2", "5.5M":"CCK-5_5", "11M":"CCK-11"};
 const atsRate = r => r.mode === "11b" ? ATS_11B[r.rate] : LEGACY.includes(r.mode) ? "OFDM-" + r.rate.replace("M","") : r.rate;
-// dutSetup.txt 的校正欄位：2.4G 不分頻寬，5G 只有 BW20
-const ATS_CAL = {"2.4G":["CAL_TRIM_FREQUENCY_2G／POWER_2G", [20,40]], "5G":["CAL_TRIM_FREQUENCY／POWER_5G_BW20", [20]]};
 function toATSuite(o){
   const L = ["TEST_ITEM,BANDWIDTH,RATE,FREQ_MHZ,POWER,POWER_LEVEL,ANT,FORMAT,PWR_UP_TOLERANCE,PWR_LOW_TOLERANCE,SAMPLING_TIME"];
-  const notes = commonNotes(o, [["bf",OTHER_STATION],["rxcal","ATSuite 範例沒有對應，未輸出"],["tp",OTHER_STATION]], "Test_Limit.txt");
+  const notes = commonNotes(o, [["rxcal","範例沒有對應的寫法，沒有寫進這份檔案"]], "Test_Limit.txt");
   const cal = o.rows.filter(isCal);
   if (cal.length) {
     L.push("WIFI_CAL,NULL,NULL,NULL,Default,NULL,NULL,NULL,NULL,NULL,100");
-    for (const b of BAND_KEYS) {
-      const c = cal.filter(r => r.band === b); if (!c.length) continue;
-      const [field, okBw] = ATS_CAL[b];
-      notes.push(`${b} 校正點要在 dutSetup.txt 設（${field}）：${c.map(r=>`${r.freq_mhz} MHz ${r.params.target_power_dbm} dBm`).join("、")}`);
-      if (c.some(r => !okBw.includes(r.bandwidth_mhz))) notes.push(`dutSetup.txt 的 ${b} 只有 BW20 的校正頻率欄，其他頻寬的校正點無法對應`);
-    }
+    notes.push("RD 要求的校正點（test_item.csv 裡只有一行 WIFI_CAL，看不到這些數字）："
+      + cal.map(r => `${CRLF}   - ${condOf(r)} ${r.freq_mhz} MHz，Target ${fmt(r.params.target_power_dbm)} dBm（${rangeText(powerLim(r).relative ? {...powerLim(r).relative, unit:"dB"} : powerLim(r))}）`).join(""));
   }
   const guessed = [...new Set(o.rows.filter(r=>isTx(r)||isRx(r)).map(r=>r.mode))].filter(m => m !== "HE" && m !== "EHT");   // EHT 照 Test_Limit.txt 的 EHTMU
   if (guessed.length) notes.push(`FORMAT 只有 HE_SU 有範例，${guessed.map(m=>`${m}→${ATS_FORMAT[m]}`).join("、")} 是推測，待確認`);
@@ -628,16 +629,15 @@ const WT_PREFIX = {HT:"HT", VHT:"AC", HE:"AX", EHT:"BE"};
 const WT_INSTANCE = {"2.4G":[0,0], "5G":[1,65]};
 const wtRate = r => LEGACY.includes(r.mode) ? r.rate : `${WT_PREFIX[r.mode]}${r.bandwidth_mhz}-${r.rate}`;
 function toITest(o){
-  const notes = commonNotes(o, [["bf",OTHER_STATION],["rxcal","可能對應 WT_QCA_CAL_RX_FW，待確認，未輸出"],["tp",OTHER_STATION]], "WT_WIFI_LIMIT.txt", true);
+  const notes = commonNotes(o, [["rxcal","可能對應 WT_QCA_CAL_RX_FW（待確認），沒有寫進這份檔案"]], "WT_WIFI_LIMIT.txt", true);
   const L = [`// RF 測試需求轉出：${[o.project,o.revision,o.rd,o.date].filter(Boolean).join(" / ")}`, "", "WT_CONNECT_TESTER", ""];
   const used = BAND_KEYS.filter(b => o.rows.some(r => r.band === b && (isCal(r)||isTx(r)||isRx(r))));
-  let noPwr = false, calNote = false;
+  let noPwr = false;
   for (const b of used) {
     const rows = o.rows.filter(r => r.band === b), [i0, i1] = WT_INSTANCE[b];
     L.push(`// ${b}`, `WT_INSERT_DUT	${b}`, `WT_INIT_DUT	${b}`, `WT_QCA_SET_INSTANCE	${i0}`, "WT_QCA_SET_PHYID	0", "", "WT_CAL_START");
     const cal = rows.filter(isCal);
     if (cal.length) {
-      calNote = true;
       L.push("//	以下為 RD 的 Calibrate Power 需求，請人工改成 QCA 校正指令");
       for (const r of cal) { const p = powerLim(r);
         for (const c of r.chains) L.push(`//	${r.freq_mhz}	${wtRate(r)}	CHAIN${c}	[${fmt(r.params.target_power_dbm)}][${fmt(p.lsl)}][${fmt(p.usl)}]`); }
@@ -655,14 +655,12 @@ function toITest(o){
     L.push(`WT_QCA_SET_INSTANCE	${i1}`, "WT_SAVE_CAL_DATA", "", `WT_REMOVE_DUT	${b}`, "", "");
   }
   L.push("WT_SHOW_VERIFY_SUMMARY", "WT_DISCONNECT_TESTER");
-  if (calNote) notes.push("校正是 QCA 專用指令，只先把需求寫成註解，要人工補");
   if (noPwr) notes.push("沒填 Power 誤差的 TX 點不帶 [目標][下限][上限]，目標功率會改用 WT_WIFI_LIMIT.txt 的預設值");
   // RX 靈敏度在 iTest 只能依 頻段／Mode／頻寬／Rate 設一個值
   const sens = {};
   o.rows.filter(isRx).forEach(r => (sens[`${r.band} ${wtRate(r)}`] ??= new Set()).add(r.params.sensitivity_dbm));
   const clash = Object.entries(sens).filter(([,s]) => s.size > 1).map(([k]) => k);
   if (clash.length) notes.push(`${clash.join("、")} 有不同的 Sensitivity，但 iTest 同一個 Rate 只能設一個值`);
-  if (used.length) notes.push(`WT_QCA_SET_INSTANCE、PHYID 照範例（${used.map(b=>`${b} ${WT_INSTANCE[b].join("／")}`).join("、")}），換晶片可能不同`);
   return {text: L.join(CRLF) + CRLF, notes};
 }
 
