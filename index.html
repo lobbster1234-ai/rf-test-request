@@ -29,6 +29,7 @@ header.top h1{font-size:17px;margin:0}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.primary:hover{filter:brightness(1.1);color:#fff}
 .btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+header.top .btn{border-color:#c3c9d8;font-weight:600;padding:6px 16px}   /* 上方三顆按鈕：框線深一點、字粗一點，比較好找 */
 .link{border:none;background:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0}
 .link:hover{text-decoration:underline}
 
@@ -164,7 +165,8 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
   <div class="spacer"></div>
   <button class="btn" id="b-open" title="選之前下載的 zip 或 JSON，載入後改版">開啟舊檔</button>
   <input type="file" id="f-open" accept=".zip,.json" hidden>
-  <button class="btn ghost" id="b-clear">清空</button>
+  <button class="btn" id="b-tpl" title="重新填回 NEW 範本">套用範本</button>
+  <button class="btn" id="b-clear">清空</button>
 </header>
 
 <div id="notice"></div>
@@ -331,6 +333,36 @@ function blankState(){
   return {meta:{project:"",rd:"",date:today(),rev:"R0A"},
           sec:Object.fromEntries(BASE_PAGES.map(p=>[p,blankSec(p)]))};
 }
+// NEW 範本：第一次打開、或按「套用範本」時填入；Project／姓名不帶
+const TPL_C5 = {20:[36,60,100,132,149], 40:[38,62,102,134,151], 80:[42,58,106,138,155], 160:[50,114]};
+const TPL_C6 = {20:[13,37,69,101,133,165,201], 40:[11,43,75,107,139,171,203], 80:[23,55,87,119,151,167,199],
+                160:[15,47,79,111,143,175,207], 320:[31,63,95,127,159,191]};
+const TEMPLATE = {
+  "2.4G|cal":   {mode:"11b", rate:"11M", v:{target:"18", lo:"-1", hi:"1"}, chs:{20:[1]}},
+  "2.4G|cal|2": {mode:"EHT", rate:"MCS13", v:{target:"18", lo:"-1", hi:"1"}, chs:{20:[1], 40:[3]}},
+  "2.4G|bf":    {mode:"VHT", rate:"MCS0", v:{target:"3", rxp:"-55", lo:"1", hi:"5"}, chs:{20:[7]}},
+  "2.4G|rxcal": {mode:"VHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6", rec:"Y"}, chs:{20:[7]}},
+  "2.4G|tx":    {mode:"EHT", rate:"MCS13", v:{target:"18", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:{20:[1,13], 40:[3,11]}},
+  "2.4G|per":   {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:{20:[1,13], 40:[3,11]}, ov:{40:{sens:"-50"}}},
+  "2.4G|tp":    {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"300"}, chs:{20:[7]}},
+  "5G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"17", lo:"-0.5", hi:"0.5"}, chs:TPL_C5},
+  "5G|bf":      {mode:"VHT", rate:"MCS0", v:{target:"5.5", rxp:"-55", lo:"2.5", hi:"15"}, chs:{20:[40,60,112]}},
+  "5G|rxcal":   {mode:"VHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6", rec:"Y"}, chs:{20:[40,60,124,153]}},
+  "5G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"17", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C5},
+  "5G|per":     {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:TPL_C5, ov:{40:{sens:"-50"}, 80:{sens:"-47"}, 160:{sens:"-44"}}},
+  "5G|tp":      {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"1300"}, chs:{80:[106]}},
+  "6G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"14", lo:"-0.5", hi:"0.5"}, chs:TPL_C6, ov:{320:{target:"13"}}},
+  "6G|rxcal":   {mode:"EHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6", rec:"Y"}, chs:{20:[13,45,77,109,141,173,209]}},
+  "6G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"14", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C6, ov:{320:{target:"13"}}},
+  "6G|per":     {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:TPL_C6, ov:{40:{sens:"-50"}, 80:{sens:"-47"}, 160:{sens:"-44"}, 320:{sens:"-41"}}},
+  "6G|tp":      {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"2400"}, chs:{160:[47]}},
+};
+function templateState(){
+  const s = blankState();
+  // 複製一份，免得勾選頻道時改到範本本身
+  for (const [pid, o] of Object.entries(TEMPLATE)) s.sec[pid] = blankSec(pid, JSON.parse(JSON.stringify(o)));
+  return s;
+}
 let state = blankState();
 let band = "5G";                 // 左側目前看的頻段
 let cur = pidOf(band, "cal");    // 目前顯示的頁：頁 id 或 "overview"
@@ -394,7 +426,7 @@ function validate(pid){
 
 /* ---------- 畫面 ---------- */
 const $ = id => document.getElementById(id);
-// 使用者輸入（或瀏覽器草稿裡的值）放進畫面前一律轉成純文字，避免被當成網頁程式碼執行
+// 使用者輸入（或舊檔裡的值）放進畫面前一律轉成純文字，避免被當成網頁程式碼執行
 const esc = t => String(t ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const opts = (list, curV) => list.map(x=>`<option value="${x}"${x==curV?" selected":""}>${x}</option>`).join("");
 
@@ -845,7 +877,7 @@ const EXPORTERS = [
 ];
 
 /* ---------- 事件 ---------- */
-function update(full){ save(); renderSide(); full ? renderMain() : paintMain(); }
+function update(full){ renderSide(); full ? renderMain() : paintMain(); }
 function setByKey(d, k, val){
   const p = k.split(":");
   if (p[0]==="v") d.v[p[1]] = val;
@@ -915,9 +947,14 @@ document.addEventListener("click", e => {
   update(true);
 });
 
-$("b-clear").onclick = () => { if (confirm("清空所有內容？")) { state = blankState(); refreshPages(); if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
+$("b-tpl").onclick = () => {
+  if (!confirm("範本將覆蓋目前填的測項（Project、姓名不變），確定嗎？")) return;
+  state = {meta:state.meta, sec:templateState().sec}; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {};
+  if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true);
+};
+$("b-clear").onclick = () => { if (confirm("會清空所有內容，確定嗎？")) { state = blankState(); refreshPages(); if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
 ["project","rd","date","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
-  state.meta[k] = e.target.value; save();
+  state.meta[k] = e.target.value;
   if (cur === "overview") renderOverview();   // 總覽頁標題跟著更新
 }));
 function syncMeta(){ ["project","rd","date","rev"].forEach(k => $("m-"+k).value = state.meta[k] ?? ""); }
@@ -1055,34 +1092,8 @@ $("f-open").onchange = async e => {
   } catch (err) { alert("無法開啟：" + err.message); }
 };
 
-/* ---------- 草稿暫存（只存在這台電腦的瀏覽器） ---------- */
-const KEY = "rf-req-draft-B-v2", OLD_KEY = "rf-req-5g-draft-B-v1";
-function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
-// 新增頻段／頻寬後，舊草稿缺的頁和頻寬補成空白
-function fillMissing(s){
-  for (const pid of BASE_PAGES) s.sec[pid] ??= blankSec(pid);
-  for (const pid of Object.keys(s.sec).filter(isGroupId)) {
-    s.sec[pid].band = bandOf(pid);
-    for (const b of BWS) s.sec[pid].bw[b] ??= {chs:[], ov:{}};
-    for (const f of secOf(pid).fields) s.sec[pid].v[f.k] ??= f.type === "yn" ? "Y" : "";
-  }
-  return s;
-}
-function load(){
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.sec) return fillMissing(s); } catch(e){}
-  // 舊版只有 5G、用測項 key 存：搬到 "5G|key"
-  try {
-    const o = JSON.parse(localStorage.getItem(OLD_KEY));
-    if (o && o.sec) { const s = blankState(); s.meta = o.meta;
-      for (const [k,v] of Object.entries(o.sec)) if (SEC[k]) s.sec[pidOf("5G",k)] = {...v, band:"5G"};
-      return fillMissing(s); }
-  } catch(e){}
-  return null;
-}
-
-state = load() || blankState();
+state = templateState();   // 每次打開都先填好範本
 refreshPages();
-state.meta.date = today();   // 每次打開都帶當天日期（草稿裡存的是上次的日期）
 const setHdr = () => document.documentElement.style.setProperty("--hdr", document.querySelector("header.top").offsetHeight + "px");
 window.addEventListener("resize", setHdr);
 syncMeta(); renderSide(); renderMain(); setHdr();
