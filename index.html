@@ -819,8 +819,8 @@ function toATSuite(o){
   const guessed = [...new Set(o.rows.filter(r=>isTx(r)||isRx(r)).map(r=>r.mode))].filter(m => m !== "HE" && m !== "EHT");   // EHT 照 Test_Limit.txt 的 EHTMU
   if (guessed.length) notes.push(`FORMAT 只有 HE_SU 有範例，${guessed.map(m=>`${m}→${ATS_FORMAT[m]}`).join("、")} 是推測，待確認`);
   if (o.rows.some(r => (isTx(r)||isRx(r)) && r.mode === "11b")) notes.push("11b 的 RATE（DSSS-1、CCK-11…）照 Test_Limit.txt 的列名推測，待確認");
-  for (const r of o.rows) {
-    if (!isTx(r) && !isRx(r)) continue;
+  // 照範例：所有頻段的 TX 先列完，再列 RX
+  for (const r of [...o.rows.filter(isTx), ...o.rows.filter(isRx)]) {
     const p = isTx(r) && powerLim(r);
     for (const c of r.chains) L.push(isTx(r)
       ? ["WIFI_TX", `BW-${r.bandwidth_mhz}`, atsRate(r), r.freq_mhz, fmt(r.params.target_power_dbm), "NULL", `ANT_${c+1}`, ATS_FORMAT[r.mode],
@@ -833,25 +833,28 @@ function toATSuite(o){
 }
 
 // iTest：WT_FLOW.txt，一行一指令，CHAIN0 起算，功率寫絕對值 [目標][下限][上限]
-// 每個頻段一段 INSERT_DUT … REMOVE_DUT；INSTANCE 開頭／結尾值照範例（2.4G 0／0、5G 1／65、6G 3／51）
+// 每個頻段一段 INSERT_DUT … REMOVE_DUT；INSTANCE 開頭／結尾值、頻段順序、WT_DELAY 都照範例（2.4G 0／0、6G 3／51、5G 1／65）
 const WT_PREFIX = {HT:"HT", VHT:"AC", HE:"AX", EHT:"BE"};
 const WT_INSTANCE = {"2.4G":[0,0], "5G":[1,65], "6G":[3,51]};
 const wtRate = r => LEGACY.includes(r.mode) ? r.rate : `${WT_PREFIX[r.mode]}${r.bandwidth_mhz}-${r.rate}`;
 function toITest(o){
   const notes = commonNotes(o, [["rxcal","可能對應 WT_QCA_CAL_RX_FW（待確認），沒有寫進這份檔案"]]);
   const L = [`// RF 測試需求轉出：${[o.project,o.revision,o.rd,o.date].filter(Boolean).join(" / ")}`, "", "WT_CONNECT_TESTER", ""];
-  const used = BAND_KEYS.filter(b => o.rows.some(r => r.band === b && (isCal(r)||isTx(r)||isRx(r))));
+  // 頻段順序照範例：2.4G → 6G → 5G
+  const used = ["2.4G", "6G", "5G"].filter(b => o.rows.some(r => r.band === b && (isCal(r)||isTx(r)||isRx(r))));
   let noPwr = false;
   for (const b of used) {
     const rows = o.rows.filter(r => r.band === b), [i0, i1] = WT_INSTANCE[b];
-    L.push(`// ${b}`, `WT_INSERT_DUT	${b}`, `WT_INIT_DUT	${b}`, `WT_QCA_SET_INSTANCE	${i0}`, "WT_QCA_SET_PHYID	0", "", "WT_CAL_START");
+    // WT_DELAY 照範例：2.4G 開頭 100、每段校正 300、2.4G 校正後 3000（毫秒）
+    L.push(`// ${b}`, `WT_INSERT_DUT	${b}`, `WT_INIT_DUT	${b}`, `WT_QCA_SET_INSTANCE	${i0}`, "WT_QCA_SET_PHYID	0",
+      ...(b === "2.4G" ? ["WT_DELAY	100"] : []), "", "WT_CAL_START", "	WT_DELAY	300");
     const cal = rows.filter(isCal);
     if (cal.length) {
       L.push("//	以下為 RD 的 Calibrate Power 需求，請人工改成 QCA 校正指令");
       for (const r of cal) { const p = powerLim(r);
         for (const c of r.chains) L.push(`//	${r.freq_mhz}	${wtRate(r)}	CHAIN${c}	[${fmt(r.params.target_power_dbm)}][${fmt(p.lsl)}][${fmt(p.usl)}]`); }
     }
-    L.push("WT_CAL_END", "");
+    L.push("WT_CAL_END", "", ...(b === "2.4G" ? ["	WT_DELAY	3000", ""] : []));
     for (const r of rows) {
       if (!isTx(r) && !isRx(r)) continue;
       const p = isTx(r) && powerLim(r);
