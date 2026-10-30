@@ -223,12 +223,12 @@ const SECTIONS = [
   { key:"cal", title:"Calibrate Power", desc:"發射功率校正", group:"band", stage:"Calibration", path:"Tx",
     fields:[
       {k:"target", label:"Target Power", unit:"dBm", req:true},
-      {k:"lo", label:"誤差下限", unit:"dB", req:true},
-      {k:"hi", label:"誤差上限", unit:"dB", req:true}],
-    pairs:[["lo","hi"]],
-    derived:v=>`→ Power ${absRange(v.target,v.lo,v.hi)} dBm`,
+      {k:"pmin", label:"Power 下限", unit:"dBm", req:true},
+      {k:"pmax", label:"Power 上限", unit:"dBm", req:true}],
+    pairs:[["pmin","pmax"]], targetIn:["pmin","pmax"],
+    derived:v=>`→ 誤差 ${relRange(v.target,v.pmin,v.pmax)} dB`,
     out:v=>({params:{target_power_dbm:num(v.target)},
-      limits:[lim("Power","dBm",add(v.target,v.lo),add(v.target,v.hi),{lsl:num(v.lo),usl:num(v.hi)})]}) },
+      limits:[lim("Power","dBm",num(v.pmin),num(v.pmax),{lsl:sub(v.pmin,v.target),usl:sub(v.pmax,v.target)})]}) },
 
   { key:"bf", title:"Tx Im BF Calibration", titles:{"2.4G":"TX BF Calibration & Verification"}, noBands:["6G"], desc:"Beamforming 校正", group:"band", stage:"Calibration", path:"Beamforming",
     fields:[
@@ -254,8 +254,8 @@ const SECTIONS = [
     specHint:"規格留空＝該項不測",
     fields:[
       {k:"target", label:"Target Power", unit:"dBm", req:true},
-      {k:"pwlo", label:"Power 誤差下限", unit:"dB"},
-      {k:"pwhi", label:"Power 誤差上限", unit:"dB"},
+      {k:"pwmin", label:"Power 下限", unit:"dBm"},
+      {k:"pwmax", label:"Power 上限", unit:"dBm"},
       {k:"evm", label:"EVM 上限", unit:"dB"},
       {k:"felo", label:"Freq Acc 下限", unit:"ppm"},
       {k:"fehi", label:"Freq Acc 上限", unit:"ppm"},
@@ -263,12 +263,12 @@ const SECTIONS = [
       {k:"lol", label:"LO Leakage 上限", unit:"dB"},
       {k:"sclo", label:"Sym Clk 下限", unit:"ppm"},
       {k:"schi", label:"Sym Clk 上限", unit:"ppm"}],
-    pairs:[["pwlo","pwhi"],["felo","fehi"],["sclo","schi"]],
-    atLeastOne:["pwlo","pwhi","evm","felo","fehi","mask","lol","sclo","schi"],
-    derived:v=>`→ Power ${absRange(v.target,v.pwlo,v.pwhi)} dBm`,
+    pairs:[["pwmin","pwmax"],["felo","fehi"],["sclo","schi"]], targetIn:["pwmin","pwmax"],
+    atLeastOne:["pwmin","pwmax","evm","felo","fehi","mask","lol","sclo","schi"],
+    derived:v=>`→ 誤差 ${relRange(v.target,v.pwmin,v.pwmax)} dB`,
     out:v=>{
       const L=[];
-      if(v.pwlo!==""||v.pwhi!=="") L.push(lim("Power","dBm",add(v.target,v.pwlo),add(v.target,v.pwhi),{lsl:num(v.pwlo),usl:num(v.pwhi)}));
+      if(v.pwmin!==""||v.pwmax!=="") L.push(lim("Power","dBm",num(v.pwmin),num(v.pwmax),{lsl:sub(v.pwmin,v.target),usl:sub(v.pwmax,v.target)}));
       if(v.evm!=="") L.push(lim("EVM","dB",null,num(v.evm)));
       if(v.felo!==""||v.fehi!=="") L.push(lim("Freq Error","ppm",num(v.felo),num(v.fehi)));
       if(v.mask!=="") L.push(lim("Spectrum Mask","%",null,num(v.mask)));
@@ -295,7 +295,9 @@ const SECTIONS = [
 ];
 const SEC = Object.fromEntries(SECTIONS.map(s=>[s.key,s]));
 function add(a,b){ if(a===""||b===""||a==null||b==null) return null; return +(Number(a)+Number(b)).toFixed(3); }
-function absRange(t,lo,hi){ const a=add(t,lo), b=add(t,hi); return (a==null&&b==null)?"—":`${a??"—"} ~ ${b??"—"}`; }
+function sub(a,b){ if(a===""||b===""||a==null||b==null) return null; return +(Number(a)-Number(b)).toFixed(3); }
+const sign = n => n == null ? "—" : n > 0 ? `+${n}` : String(n);
+function relRange(t,lo,hi){ const a=sub(lo,t), b=sub(hi,t); return (a==null&&b==null)?"—":`${sign(a)} ~ ${sign(b)}`; }
 function lim(item,unit,lsl,usl,rel){ const o={item,unit,lsl,usl}; if(rel) o.relative=rel; return o; }
 
 /* ---------- 狀態 ---------- */
@@ -338,22 +340,22 @@ const TPL_C5 = {20:[36,60,100,132,149], 40:[38,62,102,134,151], 80:[42,58,106,13
 const TPL_C6 = {20:[13,37,69,101,133,165,201], 40:[11,43,75,107,139,171,203], 80:[23,55,87,119,151,167,199],
                 160:[15,47,79,111,143,175,207], 320:[31,63,95,127,159,191]};
 const TEMPLATE = {
-  "2.4G|cal":   {mode:"11b", rate:"11M", v:{target:"18", lo:"-1", hi:"1"}, chs:{20:[1]}},
-  "2.4G|cal|2": {mode:"EHT", rate:"MCS13", v:{target:"18", lo:"-1", hi:"1"}, chs:{20:[1], 40:[3]}},
+  "2.4G|cal":   {mode:"11b", rate:"11M", v:{target:"18", pmin:"17", pmax:"19"}, chs:{20:[1]}},
+  "2.4G|cal|2": {mode:"EHT", rate:"MCS13", v:{target:"18", pmin:"17", pmax:"19"}, chs:{20:[1], 40:[3]}},
   "2.4G|bf":    {mode:"VHT", rate:"MCS0", v:{target:"3", rxp:"-55", lo:"1", hi:"5"}, chs:{20:[7]}},
   "2.4G|rxcal": {mode:"VHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6", rec:"Y"}, chs:{20:[7]}},
-  "2.4G|tx":    {mode:"EHT", rate:"MCS13", v:{target:"18", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:{20:[1,13], 40:[3,11]}},
+  "2.4G|tx":    {mode:"EHT", rate:"MCS13", v:{target:"18", pwmin:"16.5", pwmax:"19.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:{20:[1,13], 40:[3,11]}},
   "2.4G|per":   {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:{20:[1,13], 40:[3,11]}, ov:{40:{sens:"-50"}}},
   "2.4G|tp":    {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"300"}, chs:{20:[7]}},
-  "5G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"17", lo:"-0.5", hi:"0.5"}, chs:TPL_C5},
+  "5G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"17", pmin:"16.5", pmax:"17.5"}, chs:TPL_C5},
   "5G|bf":      {mode:"VHT", rate:"MCS0", v:{target:"5.5", rxp:"-55", lo:"2.5", hi:"15"}, chs:{20:[40,60,112]}},
   "5G|rxcal":   {mode:"VHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6", rec:"Y"}, chs:{20:[40,60,124,153]}},
-  "5G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"17", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C5},
+  "5G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"17", pwmin:"15.5", pwmax:"18.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C5},
   "5G|per":     {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:TPL_C5, ov:{40:{sens:"-50"}, 80:{sens:"-47"}, 160:{sens:"-44"}}},
   "5G|tp":      {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"1300"}, chs:{80:[106]}},
-  "6G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"14", lo:"-0.5", hi:"0.5"}, chs:TPL_C6, ov:{320:{target:"13"}}},
+  "6G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"14", pmin:"13.5", pmax:"14.5"}, chs:TPL_C6, ov:{320:{target:"13", pmin:"12.5", pmax:"13.5"}}},
   "6G|rxcal":   {mode:"EHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6", rec:"Y"}, chs:{20:[13,45,77,109,141,173,209]}},
-  "6G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"14", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C6, ov:{320:{target:"13"}}},
+  "6G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"14", pwmin:"12.5", pwmax:"15.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C6, ov:{320:{target:"13", pwmin:"11.5", pwmax:"14.5"}}},
   "6G|per":     {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:TPL_C6, ov:{40:{sens:"-50"}, 80:{sens:"-47"}, 160:{sens:"-44"}, 320:{sens:"-41"}}},
   "6G|tp":      {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"2400"}, chs:{160:[47]}},
 };
@@ -419,6 +421,9 @@ function validate(pid){
     // 百分比欄位只能 0～100
     for (const f of s.fields) if (f.range && v[f.k] !== "" && (Number(v[f.k]) < f.range[0] || Number(v[f.k]) > f.range[1]))
       bad(`${isOv(d,b,f.k) ? b+"MHz：" : ""}${f.label} 要在 ${f.range[0]}～${f.range[1]} ${f.unit} 之間`, where(f.k));
+    if (s.targetIn) { const [lo, hi] = s.targetIn, t = v.target;
+      if (t !== "" && v[lo] !== "" && v[hi] !== "" && (Number(t) < Number(v[lo]) || Number(t) > Number(v[hi])))
+        bad(`${b}MHz：Target Power 要在 Power 上下限之間`, where("target"), where(lo), where(hi)); }
     if (s.atLeastOne && s.atLeastOne.every(k => v[k] === "")) bad(`至少要填一個測項規格`, ...s.atLeastOne.map(k=>"v:"+k));
   }
   return {errs:[...new Set(errs)], marks};
@@ -807,26 +812,26 @@ function commonNotes(o, unsupported){
 }
 
 // 筑波 ATSuite：test_item.csv，一天線一列，ANT_1 起算
-// FORMAT 只有 HE_SU 有範例；EHT_MU 照 Test_Limit.txt 只有 EHTMU 推得；11b 的 DSSS 也是照 Test_Limit.txt 推的
-const ATS_FORMAT = {"11b":"DSSS", "11g":"NON_HT", "11a":"NON_HT", HT:"HT", VHT:"VHT", HE:"HE_SU", EHT:"EHT_MU"};
+// FORMAT 照範例（NON_HT、HT_MF、VHT、HE_SU、EHT_MU）；11b 的 DSSS 範例沒有，照 Test_Limit.txt 推的
+const ATS_FORMAT = {"11b":"DSSS", "11g":"NON_HT", "11a":"NON_HT", HT:"HT_MF", VHT:"VHT", HE:"HE_SU", EHT:"EHT_MU"};
 // 11b 的 RATE 照 Test_Limit.txt 的列名
 const ATS_11B = {"1M":"DSSS-1", "2M":"DSSS-2", "5.5M":"CCK-5_5", "11M":"CCK-11"};
 const atsRate = r => r.mode === "11b" ? ATS_11B[r.rate] : LEGACY.includes(r.mode) ? "OFDM-" + r.rate.replace("M","") : r.rate;
 function toATSuite(o){
-  const L = ["TEST_ITEM,BANDWIDTH,RATE,FREQ_MHZ,POWER,POWER_LEVEL,ANT,FORMAT,PWR_UP_TOLERANCE,PWR_LOW_TOLERANCE,SAMPLING_TIME"];
-  const notes = commonNotes(o, [["rxcal","範例沒有對應的寫法，沒有寫進這份檔案"]]);
-  if (o.rows.some(isCal)) L.push("WIFI_CAL,NULL,NULL,NULL,Default,NULL,NULL,NULL,NULL,NULL,100");
-  const guessed = [...new Set(o.rows.filter(r=>isTx(r)||isRx(r)).map(r=>r.mode))].filter(m => m !== "HE" && m !== "EHT");   // EHT 照 Test_Limit.txt 的 EHTMU
-  if (guessed.length) notes.push(`FORMAT 只有 HE_SU 有範例，${guessed.map(m=>`${m}→${ATS_FORMAT[m]}`).join("、")} 是推測，待確認`);
-  if (o.rows.some(r => (isTx(r)||isRx(r)) && r.mode === "11b")) notes.push("11b 的 RATE（DSSS-1、CCK-11…）照 Test_Limit.txt 的列名推測，待確認");
-  // 照範例：所有頻段的 TX 先列完，再列 RX
+  const L = ["TEST_ITEM,BANDWIDTH,RATE,FREQ_MHZ,POWER,POWER_LEVEL,ANT,FORMAT,PWR_UP,PWR_LOW,SAMPLING_TIME,SETTLE_TIME,OPTION"];
+  const notes = commonNotes(o, []);
+  // 照範例：RX Gain Error 校正 → 功率校正 → 所有頻段的 TX → RX
+  if (o.rows.some(r => r.test_key === "rxcal")) L.push("WIFI_RX_CAL,NULL,NULL,NULL,Default,NULL,NULL,NULL,NULL,NULL,100,Default,NULL");
+  if (o.rows.some(isCal)) L.push("WIFI_CAL,NULL,NULL,NULL,Default,NULL,NULL,NULL,NULL,NULL,100,Default,NULL");
+  if (o.rows.some(r => (isTx(r)||isRx(r)) && r.mode === "11b")) notes.push("11b 的 FORMAT（DSSS）和 RATE（DSSS-1、CCK-11…）範例沒有，照 Test_Limit.txt 的列名推測，待確認");
+  // RX 的 POWER 寫 Default，靈敏度寫在 Test_Limit.txt 的 Rx_Pwr
   for (const r of [...o.rows.filter(isTx), ...o.rows.filter(isRx)]) {
     const p = isTx(r) && powerLim(r);
     for (const c of r.chains) L.push(isTx(r)
-      ? ["WIFI_TX", `BW-${r.bandwidth_mhz}`, atsRate(r), r.freq_mhz, fmt(r.params.target_power_dbm), "NULL", `ANT_${c+1}`, ATS_FORMAT[r.mode],
-         p ? fmt(p.relative.usl) : "Default", p ? fmt(-p.relative.lsl) : "Default", "Default"].join(",")
-      : ["WIFI_RX", `BW-${r.bandwidth_mhz}`, atsRate(r), r.freq_mhz, fmt(r.params.sensitivity_dbm), "NULL", `ANT_${c+1}`, ATS_FORMAT[r.mode],
-         "NULL", "NULL", "NULL"].join(","));
+      ? ["WIFI_TX", `BW-${r.bandwidth_mhz}`, atsRate(r), r.freq_mhz, fmt(r.params.target_power_dbm), "1", `ANT_${c+1}`, ATS_FORMAT[r.mode],
+         p ? fmt(p.relative.usl) : "Default", p ? fmt(-p.relative.lsl) : "Default", "Default", "Default", "Default"].join(",")
+      : ["WIFI_RX", `BW-${r.bandwidth_mhz}`, atsRate(r), r.freq_mhz, "Default", "NULL", `ANT_${c+1}`, ATS_FORMAT[r.mode],
+         "NULL", "NULL", "NULL", "Default", "NULL"].join(","));
   }
   const al = toAtsLimit(o);
   return {text: L.join(CRLF) + CRLF, notes:[...notes, ...al.notes], extra:[{file:"Test_Limit.txt", data:al.text}]};
@@ -1116,10 +1121,25 @@ async function jsonFromZip(buf){
 // R0A → R0B；最後一碼不是 A～Y 就維持原樣讓 RD 自己改
 const nextRev = r => /^(.*?)([A-Y])$/.test(r || "") ? r.slice(0, -1) + String.fromCharCode(r.charCodeAt(r.length - 1) + 1) : (r || "");
 // 檔案裡的表單狀態逐欄檢查後才放回來（只收認得的欄位、合法的 Mode／Rate／頻道）
+// 以前的檔案 Power 存的是 Target 加減的誤差，開啟時換成上下限
+const OLD_PWR = {cal:["lo","hi","pmin","pmax"], tx:["pwlo","pwhi","pwmin","pwmax"]};
+function oldPower(pid, x){
+  const m = OLD_PWR[pid.split("|")[1]], v = x.v || {};
+  if (!m || !(m[0] in v || m[1] in v)) return;
+  const [lo, hi, mn, mx] = m;
+  for (const b of BWS) {
+    const ov = x.bw?.[b]?.ov;
+    if (!ov || !["target", lo, hi].some(k => k in ov)) continue;
+    const t = ov.target ?? v.target;
+    ov[mn] = String(add(t, ov[lo] ?? v[lo]) ?? ""); ov[mx] = String(add(t, ov[hi] ?? v[hi]) ?? "");
+  }
+  v[mn] = String(add(v.target, v[lo]) ?? ""); v[mx] = String(add(v.target, v[hi]) ?? "");
+}
 function restoreDraft(dr){
   const st = blankState();
   for (const pid of Object.keys(dr.sec || {}).filter(isGroupId)) {
     const x = dr.sec[pid]; if (!x) continue;
+    oldPower(pid, x);
     const band = bandOf(pid), modes = BANDS[band].modes;
     const mode = modes[x.mode] ? x.mode : "EHT";
     const chs = {}, ov = {};
@@ -1142,10 +1162,10 @@ function restoreDraft(dr){
 // 舊版檔案（沒有存表單原始狀態）：從測試點清單倒推回表單，猜不準的地方回傳提醒
 // 每列的 id 是「頻段-測項-序號」（例：5G-CAL-001），用它找回是哪一頁
 const ROW_TO_FIELDS = {
-  cal:  r => ({target:r.params?.target_power_dbm, lo:relOf(r,"Power").lsl, hi:relOf(r,"Power").usl}),
+  cal:  r => ({target:r.params?.target_power_dbm, pmin:limOf(r,"Power").lsl, pmax:limOf(r,"Power").usl}),
   bf:   r => ({target:r.params?.target_power_dbm, rxp:r.params?.dut_rx_power_dbm, lo:limOf(r,"iBF Power").lsl, hi:limOf(r,"iBF Power").usl}),
   rxcal:r => ({rxp:r.params?.dut_rx_power_dbm, lo:limOf(r,"Rx Gain Error").lsl, hi:limOf(r,"Rx Gain Error").usl, rec:r.params?.record_result === false ? "N" : "Y"}),
-  tx:   r => ({target:r.params?.target_power_dbm, pwlo:relOf(r,"Power").lsl, pwhi:relOf(r,"Power").usl, evm:limOf(r,"EVM").usl,
+  tx:   r => ({target:r.params?.target_power_dbm, pwmin:limOf(r,"Power").lsl, pwmax:limOf(r,"Power").usl, evm:limOf(r,"EVM").usl,
                felo:limOf(r,"Freq Error").lsl, fehi:limOf(r,"Freq Error").usl, mask:limOf(r,"Spectrum Mask").usl,
                lol:limOf(r,"LO Leakage").usl, sclo:limOf(r,"Sym Clk Error").lsl, schi:limOf(r,"Sym Clk Error").usl}),
   per:  r => ({sens:r.params?.sensitivity_dbm, per:limOf(r,"PER").usl}),
