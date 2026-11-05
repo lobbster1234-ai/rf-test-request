@@ -180,13 +180,13 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
 const BWS = [20,40,80,160,320];
 const OFDM = ["6M","9M","12M","18M","24M","36M","48M","54M"];
 const MODES = {
-  "11b":{rates:["1M","2M","5.5M","11M"], nss:false},
-  "11g":{rates:OFDM, nss:false},
-  "11a":{rates:OFDM, nss:false},
-  "HT": {rates:mcs(7),  nss:true},
-  "VHT":{rates:mcs(9),  nss:true},
-  "HE": {rates:mcs(11), nss:true},
-  "EHT":{rates:mcs(13), nss:true}
+  "11b":{rates:["1M","2M","5.5M","11M"]},
+  "11g":{rates:OFDM},
+  "11a":{rates:OFDM},
+  "HT": {rates:mcs(7)},
+  "VHT":{rates:mcs(9)},
+  "HE": {rates:mcs(11)},
+  "EHT":{rates:mcs(13)}
 };
 function mcs(n){return Array.from({length:n+1},(_,i)=>"MCS"+i)}
 // 各頻段：頻道（依頻寬）、頻率公式、可用 Mode 與各 Mode 支援的頻寬
@@ -322,7 +322,7 @@ function blankSec(pid, o={}){
   s.fields.forEach(f => v[f.k] = o.v?.[f.k] ?? (f.type==="yn" ? "Y" : ""));
   const bw = {};
   BWS.forEach(b => bw[b] = {chs:o.chs?.[b] ?? [], ov:o.ov?.[b] ?? {}});
-  return {band:bandOf(pid), mode:o.mode ?? "EHT", rate:o.rate ?? (s.auto ? "auto" : "MCS13"), nss:o.nss ?? 1,
+  return {band:bandOf(pid), mode:o.mode ?? "EHT", rate:o.rate ?? (s.auto ? "auto" : "MCS13"),
           chains:o.chains ?? [true,true,true,true], dirs:o.dirs ?? {TX:true,RX:true}, v, bw};
 }
 // 用本地時間，不用 toISOString（那是 UTC，台灣早上 8 點前會變成前一天）
@@ -371,7 +371,6 @@ const ui = {pick:{}, ov:{}, dismiss:{}, fold:{}, notice:null};   // 介面展開
 
 /* ---------- 計算 ---------- */
 const rateList = (pid, mode) => (secOf(pid).auto ? ["auto"] : []).concat(MODES[mode].rates);
-const nssOn = d => MODES[d.mode].nss && d.rate !== "auto";
 const usedBws = d => bwsOf(d.band, d.mode).filter(b => d.bw[b].chs.length);
 // 目前 Mode 不支援、但之前有選頻道的頻寬（不列入輸出，改回支援的 Mode 會恢復）
 const hiddenBws = d => BWS.filter(b => !bwsOf(d.band, d.mode).includes(b) && d.bw[b].chs.length);
@@ -492,10 +491,9 @@ function renderMain(){
         ${s.dir?`<label class="fld">方向<span class="checks" data-k="dirs">${["TX","RX"].map(x=>`<label><input type="checkbox" data-dir="${x}"${d.dirs[x]?" checked":""}>${x}</label>`).join("")}</span></label>`:""}
         <label class="fld">802.11 Mode<span class="in"><select data-k="mode">${opts(Object.keys(BANDS[d.band].modes),d.mode)}</select></span></label>
         <label class="fld">Rate<span class="in"><select data-k="rate">${opts(rateList(pid,d.mode),d.rate)}</select></span></label>
-        <label class="fld">NSS<span class="in"><select data-k="nss"${nssOn(d)?"":" disabled"}>${nssOn(d)?opts([1,2,3,4],d.nss):"<option>—</option>"}</select></span></label>
         <label class="fld">Chain<span class="checks" data-k="chains">${d.chains.map((c,j)=>`<label><input type="checkbox" data-chain="${j}"${c?" checked":""}>${j}</label>`).join("")}</span></label>
       </div>
-      <div class="grp-tools">${pid !== baseOf(pid) ? `<button class="link danger" data-delgroup>刪除這一組</button>` : ""}<button class="link" data-addgroup title="同一個測項要用不同的 Mode／Rate／NSS／Chain 時，新增一組">＋ 新增一組條件（不同 Mode／Rate）</button></div></div>
+      <div class="grp-tools">${pid !== baseOf(pid) ? `<button class="link danger" data-delgroup>刪除這一組</button>` : ""}<button class="link" data-addgroup title="同一個測項要用不同的 Mode／Rate／Chain 時，新增一組">＋ 新增一組條件（不同 Mode／Rate）</button></div></div>
 
     <div class="step"><div class="step-t"><span class="no">2</span><h3>規格</h3>${s.specHint?`<span class="hint">${s.specHint}</span>`:""}</div>
       <div class="fields">
@@ -554,7 +552,7 @@ function renderOverview(){
     const bws = usedBws(d);
     const ov = bws.filter(b=>ovCount(d,b)).map(b=>`${b}M：`+Object.entries(d.bw[b].ov).filter(([,x])=>x!=="").map(([k,x])=>`${s.fields.find(f=>f.k===k).label} ${esc(x)}`).join("、"));
     return `<tr><td><b>${pageName(p)}</b><div class="sm">${s.desc}</div></td>
-      <td class="nw">${s.dir?["TX","RX"].filter(x=>d.dirs[x]).join("/")+" · ":""}${esc(d.mode)} · ${esc(d.rate)}${nssOn(d)?" · NSS"+esc(d.nss):""}<div class="sm">Chain ${chainsOf(d).join(",")}</div></td>
+      <td class="nw">${s.dir?["TX","RX"].filter(x=>d.dirs[x]).join("/")+" · ":""}${esc(d.mode)} · ${esc(d.rate)}<div class="sm">Chain ${chainsOf(d).join(",")}</div></td>
       <td>${specSummary(s,d.v)}${ov.length?`<div class="sm" style="color:var(--warn)">例外 ${ov.join("；")}</div>`:""}${hiddenNote(d)?`<div class="sm" style="color:var(--warn)">⚠ ${esc(hiddenNote(d))}</div>`:""}</td>
       <td class="nw">${bws.map(b=>`<div class="chline"><b>${b}M</b>${esc([...d.bw[b].chs].sort((x,y)=>x-y).join("  "))}</div>`).join("")}</td>
       <td class="mono">${pointsOf(p).length}</td></tr>`;
@@ -706,7 +704,7 @@ ${[5,6,7,8].map(f => `<xf numFmtId="0" fontId="0" fillId="${f}" borderId="1" xfI
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 
-// 一個測項一塊：條件（頻段／Mode／頻寬／Rate／NSS／Chain／方向）和規格全部一樣的頻道合成一列
+// 一個測項一塊：條件（頻段／Mode／頻寬／Rate／Chain／方向）和規格全部一樣的頻道合成一列
 function specSheet(o){
   const sh = xlSheet(); let r = 0;
   sh.set(r, 1, "RF 測試規格總表", 1); r += 2;
@@ -717,18 +715,18 @@ function specSheet(o){
     const sec = XL_SECTIONS[key], list = o.rows.filter(x => x.test_key === key); if (!list.length) continue;
     const merged = new Map();
     for (const x of list) {
-      const cond = [x.band, x.mode, x.bandwidth_mhz, x.rate, x.nss ?? "", x.chains.join(",")], dir = sec.dir ? [x.direction === "TX" ? "Tx" : "Rx"] : [];
+      const cond = [x.band, x.mode, x.bandwidth_mhz, x.rate, x.chains.join(",")], dir = sec.dir ? [x.direction === "TX" ? "Tx" : "Rx"] : [];
       const k = JSON.stringify([cond, dir, sec.vals(x)]);
       if (!merged.has(k)) merged.set(k, {cond, dir, vals:sec.vals(x), chs:[]});
       if (!merged.get(k).chs.includes(x.channel)) merged.get(k).chs.push(x.channel);
     }
     sh.set(r, 1, sec.title, 11); r++;
-    // Channel 固定在第 7 欄（最寬那欄），Throughput 的 Direction 接在後面
-    const head = ["Band", "IEEE 802.11", "BW (MHz)", "Rate", "NSS", "Chain", "Channel", ...(sec.dir ? ["Direction"] : []), ...sec.head];
+    // Channel 固定在第 6 欄（最寬那欄），Throughput 的 Direction 接在後面
+    const head = ["Band", "IEEE 802.11", "BW (MHz)", "Rate", "Chain", "Channel", ...(sec.dir ? ["Direction"] : []), ...sec.head];
     const nCond = head.length - sec.head.length, hs = sec.ver ? 3 : 2;
     head.forEach((t, j) => sh.set(r, 1 + j, t, j >= nCond && sec.specFill ? 4 : hs)); r++;
     for (const m of merged.values()) {
-      [...m.cond, m.chs.join(", "), ...m.dir, ...m.vals].forEach((v, j) => sh.set(r, 1 + j, v ?? "", j === 6 ? 12 : 5));
+      [...m.cond, m.chs.join(", "), ...m.dir, ...m.vals].forEach((v, j) => sh.set(r, 1 + j, v ?? "", j === 5 ? 12 : 5));
       r++;
     }
     r++;
@@ -736,7 +734,7 @@ function specSheet(o){
   return sh;
 }
 function buildXlsx(o){
-  const sheets = [["規格總表", sheetXml(specSheet(o), [3, 13, 13, 11, 10, 7, 11, 40, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18])]];
+  const sheets = [["規格總表", sheetXml(specSheet(o), [3, 13, 13, 11, 10, 11, 40, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18])]];
   const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
   const NS = "http://schemas.openxmlformats.org", REL = `${NS}/officeDocument/2006/relationships`;
   const files = [
@@ -780,7 +778,7 @@ function buildOutput(){
         id:`${d.band}-${s.key.toUpperCase()}-${String(n).padStart(3,"0")}`, group:groupNo(pid),
         band:d.band, test_key:s.key, test:titleOf(pid), stage:s.stage, path:s.path, ...(s.dir?{direction:p.dir}:{}),
         mode:d.mode, bandwidth_mhz:p.b, channel:p.ch, freq_mhz:freqOf(d.band,p.ch),
-        rate:d.rate, nss:nssOn(d)?Number(d.nss):null, chains:chainsOf(d),
+        rate:d.rate, chains:chainsOf(d),
         params:o.params, limits:o.limits
       });
     });
@@ -806,7 +804,6 @@ function commonNotes(o, unsupported){
     const t = [...new Set(o.rows.filter(r => r.test_key === key).map(r => `${r.band} ${r.test}`))];
     if (t.length) notes.push(`${t.join("、")}：${why}`);
   }
-  if (o.rows.some(r => (isTx(r)||isRx(r)) && r.nss > 1)) notes.push("範例沒有 NSS 寫法，NSS 2 以上的點目前照 1 輸出");
   return notes;
 }
 
@@ -1018,7 +1015,7 @@ function setByKey(d, k, val){
   const p = k.split(":");
   if (p[0]==="v") d.v[p[1]] = val;
   else if (p[0]==="ov") d.bw[p[1]].ov[p[2]] = val;
-  else d[k] = (k==="nss") ? Number(val) : val;
+  else d[k] = val;
 }
 // 百分比欄位（min=0）直接不讓打負號
 document.addEventListener("keydown", e => {
@@ -1148,7 +1145,7 @@ function restoreDraft(dr){
       ov[b] = Object.fromEntries(Object.entries(x.bw?.[b]?.ov || {}).filter(([k]) => secOf(pid).fields.some(f => f.k === k)).map(([k, val]) => [k, String(val ?? "")]));
     }
     const v = Object.fromEntries(Object.entries(x.v || {}).filter(([k]) => secOf(pid).fields.some(f => f.k === k)).map(([k, val]) => [k, String(val ?? "")]));
-    const d = blankSec(pid, {mode, rate:x.rate, nss:[1,2,3,4].includes(Number(x.nss)) ? Number(x.nss) : 1,
+    const d = blankSec(pid, {mode, rate:x.rate,
       chains:Array.isArray(x.chains) && x.chains.length === 4 ? x.chains.map(Boolean) : undefined,
       dirs:x.dirs ? {TX:!!x.dirs.TX, RX:!!x.dirs.RX} : undefined, v, chs, ov});
     if (!rateList(pid, d.mode).includes(d.rate)) d.rate = rateList(pid, d.mode)[0];
@@ -1184,7 +1181,7 @@ function legacyDraft(o){
   const sec = {}, split = {};
   for (const [base, all] of Object.entries(groups)) {
     const by = new Map();
-    for (const r of all) { const sig = JSON.stringify([r.mode, r.rate, r.nss ?? 1, r.chains]); if (!by.has(sig)) by.set(sig, []); by.get(sig).push(r); }
+    for (const r of all) { const sig = JSON.stringify([r.mode, r.rate, r.chains]); if (!by.has(sig)) by.set(sig, []); by.get(sig).push(r); }
     [...by.values()].forEach((rows, i) => split[i ? `${base}|${i + 1}` : base] = rows);
   }
   for (const [pid, rows] of Object.entries(split)) {
@@ -1213,7 +1210,7 @@ function legacyDraft(o){
     if (bws.length > 1 && bws.some(b => Object.keys(bw[b].ov).length))
       notes.push(`${name}：舊檔沒記錄哪些是共同規格、哪些是例外，已用 ${base}MHz 的值當共同規格，其他頻寬不一樣的地方設成「此頻寬規格不同」，請確認`);
     const dirs = key === "tp" ? {TX:rows.some(r => r.direction === "TX"), RX:rows.some(r => r.direction === "RX")} : undefined;
-    sec[pid] = {mode:first.mode, rate:first.rate, nss:first.nss ?? 1, chains, dirs, v, bw};
+    sec[pid] = {mode:first.mode, rate:first.rate, chains, dirs, v, bw};
   }
   return {draft:{meta:{project:o.project, rd:o.rd, rev:o.revision, date:o.date}, sec}, notes:[...new Set(notes)]};
 }
