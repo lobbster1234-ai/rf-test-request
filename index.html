@@ -60,6 +60,14 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .ic.todo{border:2px solid var(--line);}
 .ic.ok{background:var(--ok);color:#fff}
 .ic.bad{background:var(--err);color:#fff}
+.ic[data-toggle]{cursor:pointer}
+.ic[data-toggle]:hover{box-shadow:0 0 0 3px var(--accent-soft)}
+.fld input:disabled,.checks input:disabled{cursor:not-allowed}
+.fld input[type=number]:disabled{background:var(--soft);color:var(--muted)}
+.fld .tl{display:inline-flex;align-items:center;gap:4px;color:var(--ink);font-size:13px;cursor:pointer;height:36px}
+.fld.off{opacity:.55}
+.chip input:disabled+span{opacity:.4;cursor:not-allowed;border-style:dashed}
+.chip input:disabled+span:hover{border-color:var(--line)}
 .item .nm{flex:1;font-size:13px;line-height:1.3}
 .item .nm small{display:block;color:var(--muted);font-size:11px}
 .item .n{font-size:12px;color:var(--muted);font-family:Consolas,ui-monospace,monospace}
@@ -88,9 +96,13 @@ nav.side.free{position:static}   /* 總覽頁不跟著捲，看明細時不會�
 .step-t h3{font-size:15px;margin:0}
 .step-t .hint{color:var(--muted);font-size:12px}
 .fields{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end}
+.fgap{width:18px}
+.fields+.fields{margin-top:18px;padding-top:18px;border-top:1px dashed var(--line)}
 .fld{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
 .fld .in{display:flex;align-items:center;gap:5px}
 .fld .u{font-size:12px;color:var(--muted)}
+.fld .fx{font-size:14px;color:var(--ink);font-weight:400;padding:0 2px}
+.fld .sg{font-size:15px;color:var(--ink);width:10px;text-align:center}
 .fld select,.fld input[type=number]{font:inherit;font-size:14px;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#fff}
 .fld input[type=number]{width:84px}
 .checks{display:flex;gap:12px;align-items:center;padding:6px 2px;border:1px solid transparent;border-radius:8px}
@@ -193,7 +205,8 @@ function mcs(n){return Array.from({length:n+1},(_,i)=>"MCS"+i)}
 // 2.4G 頻道 14（2484，只有 11b 能用）範本沒有，先不列
 const BANDS = {
   "2.4G":{
-    ch:{20:[1,2,3,4,5,6,7,8,9,10,11,12,13], 40:[1,3,4,5,6,7,8,9,10,11]},   // 40M ch1（2412）照範本 Calibrate Power EHT_SU40，已確認不是筆誤
+    ch:{20:[1,2,3,4,5,6,7,8,9,10,11,12,13], 40:[1,2,3,4,5,6,7,8,9,10,11,12,13]},
+    lock:{40:[1,2,12,13]},   // 40M 列出 1～13 給大家看，但只有 3～11 能選（1、2、12、13 灰掉）
     freq:ch => 2407 + ch * 5,
     modes:{"11b":[20], "11g":[20], HT:[20,40], VHT:[20,40], HE:[20,40], EHT:[20,40]}},
   "5G":{
@@ -216,6 +229,8 @@ const bandOf = pid => pid.split("|")[0];
 const secOf = pid => SEC[pid.split("|")[1]];
 const freqOf = (band, ch) => BANDS[band].freq(ch);
 const bwsOf = (band, mode) => BANDS[band].modes[mode];
+// 能選的頻道（扣掉灰掉的）
+const chOk = (band, b) => (BANDS[band].ch[b] || []).filter(c => !BANDS[band].lock?.[b]?.includes(c));
 const num = v => (v === "" || v == null) ? null : Number(v);
 
 /* ---------- 測項定義（以 NEW 版範本為準：2.4G／5G 頁各 5 塊 + Throughput 工作表） ---------- */
@@ -223,12 +238,12 @@ const SECTIONS = [
   { key:"cal", title:"Calibrate Power", desc:"發射功率校正", group:"band", stage:"Calibration", path:"Tx",
     fields:[
       {k:"target", label:"Target Power", unit:"dBm", req:true},
-      {k:"pmin", label:"Power 下限", unit:"dBm", req:true},
-      {k:"pmax", label:"Power 上限", unit:"dBm", req:true}],
-    pairs:[["pmin","pmax"]], targetIn:["pmin","pmax"],
-    derived:v=>`→ 誤差 ${relRange(v.target,v.pmin,v.pmax)} dB`,
+      {k:"lo", label:"誤差下限", unit:"dB", req:true, rangeTo:"hi", rlabel:"誤差"},
+      {k:"hi", label:"誤差上限", unit:"dB", req:true, rangeOf:true}],
+    pairs:[["lo","hi"]],
+    derived:v=>`→ Power ${absRange(v.target,v.lo,v.hi)} dBm`,
     out:v=>({params:{target_power_dbm:num(v.target)},
-      limits:[lim("Power","dBm",num(v.pmin),num(v.pmax),{lsl:sub(v.pmin,v.target),usl:sub(v.pmax,v.target)})]}) },
+      limits:[lim("Power","dBm",add(v.target,v.lo),add(v.target,v.hi),{lsl:num(v.lo),usl:num(v.hi)})]}) },
 
   { key:"bf", title:"Tx Im BF Calibration", titles:{"2.4G":"TX BF Calibration & Verification"}, noBands:["6G"], desc:"Beamforming 校正", group:"band", stage:"Calibration", path:"Beamforming",
     fields:[
@@ -253,24 +268,27 @@ const SECTIONS = [
     specHint:"規格留空＝該項不測",
     fields:[
       {k:"target", label:"Target Power", unit:"dBm", req:true},
-      {k:"pwmin", label:"Power 下限", unit:"dBm"},
-      {k:"pwmax", label:"Power 上限", unit:"dBm"},
-      {k:"evm", label:"EVM 上限", unit:"dB"},
+      {k:"pwlo", label:"Power 誤差下限", unit:"dB", rangeTo:"pwhi", rlabel:"Power 誤差"},
+      {k:"pwhi", label:"Power 誤差上限", unit:"dB", rangeOf:true},
+      {k:"evm", label:"EVM", unit:"dB", fixLo:-80},
       {k:"felo", label:"Freq Acc 下限", unit:"ppm"},
       {k:"fehi", label:"Freq Acc 上限", unit:"ppm"},
-      {k:"mask", label:"Spectrum Mask 上限", unit:"%", range:[0,100]},
-      {k:"lol", label:"LO Leakage 上限", unit:"dB"},
-      {k:"sclo", label:"Sym Clk 下限", unit:"ppm"},
-      {k:"schi", label:"Sym Clk 上限", unit:"ppm"}],
-    pairs:[["pwmin","pwmax"],["felo","fehi"],["sclo","schi"]], targetIn:["pwmin","pwmax"],
-    atLeastOne:["pwmin","pwmax","evm","felo","fehi","mask","lol","sclo","schi"],
-    derived:v=>`→ 誤差 ${relRange(v.target,v.pwmin,v.pwmax)} dB`,
+      {k:"mask", label:"Spectrum Mask", unit:"%", range:[0,100], fixLo:0},
+      {k:"lol", label:"LO Leakage 上限", unit:"dB", tog:"lol"},
+      {k:"sclo", label:"Sym Clk 下限", unit:"ppm", tog:"sc"},
+      {k:"schi", label:"Sym Clk 上限", unit:"ppm", tog:"sc"}],
+    // 不是每個案子都測：勾了才能填（預設灰掉）
+    toggles:[{k:"lol", label:"LO Leakage", keys:["lol"]}, {k:"sc", label:"Sym Clk", keys:["sclo","schi"]}],
+    rows:[["target","pwlo","@derived"], ["evm","|","felo","fehi","|","mask"], ["lol","sclo","schi"]],
+    pairs:[["pwlo","pwhi"],["felo","fehi"],["sclo","schi"]],
+    atLeastOne:["pwlo","pwhi","evm","felo","fehi","mask","lol","sclo","schi"],
+    derived:v=>`→ Power ${absRange(v.target,v.pwlo,v.pwhi)} dBm`,
     out:v=>{
       const L=[];
-      if(v.pwmin!==""||v.pwmax!=="") L.push(lim("Power","dBm",num(v.pwmin),num(v.pwmax),{lsl:sub(v.pwmin,v.target),usl:sub(v.pwmax,v.target)}));
-      if(v.evm!=="") L.push(lim("EVM","dB",null,num(v.evm)));
+      if(v.pwlo!==""||v.pwhi!=="") L.push(lim("Power","dBm",add(v.target,v.pwlo),add(v.target,v.pwhi),{lsl:num(v.pwlo),usl:num(v.pwhi)}));
+      if(v.evm!=="") L.push(lim("EVM","dB",-80,num(v.evm)));
       if(v.felo!==""||v.fehi!=="") L.push(lim("Freq Error","ppm",num(v.felo),num(v.fehi)));
-      if(v.mask!=="") L.push(lim("Spectrum Mask","%",null,num(v.mask)));
+      if(v.mask!=="") L.push(lim("Spectrum Mask","%",0,num(v.mask)));
       if(v.lol!=="") L.push(lim("LO Leakage","dB",null,num(v.lol)));
       if(v.sclo!==""||v.schi!=="") L.push(lim("Sym Clk Error","ppm",num(v.sclo),num(v.schi)));
       return {params:{target_power_dbm:num(v.target)}, limits:L};
@@ -279,7 +297,7 @@ const SECTIONS = [
   { key:"per", title:"Rx PER", desc:"接收靈敏度", group:"band", stage:"Verification", path:"Rx",
     fields:[
       {k:"sens", label:"Sensitivity", unit:"dBm", req:true},
-      {k:"per", label:"PER 上限", unit:"%", req:true, range:[0,100]}],
+      {k:"per", label:"PER 上限", unit:"%", req:true, range:[0,10]}],
     out:v=>({params:{sensitivity_dbm:num(v.sens)}, limits:[lim("PER","%",null,num(v.per))]}) },
 
   { key:"tp", title:"Throughput", desc:"傳輸速率", group:"Throughput", stage:"Verification", path:"Throughput", dir:true, auto:true,
@@ -296,6 +314,7 @@ const SEC = Object.fromEntries(SECTIONS.map(s=>[s.key,s]));
 function add(a,b){ if(a===""||b===""||a==null||b==null) return null; return +(Number(a)+Number(b)).toFixed(3); }
 function sub(a,b){ if(a===""||b===""||a==null||b==null) return null; return +(Number(a)-Number(b)).toFixed(3); }
 const sign = n => n == null ? "—" : n > 0 ? `+${n}` : String(n);
+function absRange(t,lo,hi){ const a=add(t,lo), b=add(t,hi); return (a==null&&b==null)?"—":`${a??"—"} ~ ${b??"—"}`; }
 function relRange(t,lo,hi){ const a=sub(lo,t), b=sub(hi,t); return (a==null&&b==null)?"—":`${sign(a)} ~ ${sign(b)}`; }
 function lim(item,unit,lsl,usl,rel){ const o={item,unit,lsl,usl}; if(rel) o.relative=rel; return o; }
 
@@ -323,7 +342,8 @@ function blankSec(pid, o={}){
   const bw = {};
   BWS.forEach(b => bw[b] = {chs:o.chs?.[b] ?? [], ov:o.ov?.[b] ?? {}});
   return {band:bandOf(pid), mode:o.mode ?? "EHT", rate:o.rate ?? (s.auto ? "auto" : "MCS13"),
-          chains:o.chains ?? [true,true,true,true], dirs:o.dirs ?? {TX:true,RX:true}, v, bw};
+          chains:[true,true,true,true], dirs:o.dirs ?? {TX:true,RX:true}, v, bw,   // Chain 固定全測
+          on:Object.fromEntries((s.toggles || []).map(g => [g.k, g.keys.some(k => v[k] !== "" || BWS.some(b => (bw[b].ov[k] ?? "") !== ""))]))};
 }
 // 用本地時間，不用 toISOString（那是 UTC，台灣早上 8 點前會變成前一天）
 function today(){
@@ -339,22 +359,22 @@ const TPL_C5 = {20:[36,60,100,132,149], 40:[38,62,102,134,151], 80:[42,58,106,13
 const TPL_C6 = {20:[13,37,69,101,133,165,201], 40:[11,43,75,107,139,171,203], 80:[23,55,87,119,151,167,199],
                 160:[15,47,79,111,143,175,207], 320:[31,63,95,127,159,191]};
 const TEMPLATE = {
-  "2.4G|cal":   {mode:"11b", rate:"11M", v:{target:"18", pmin:"17", pmax:"19"}, chs:{20:[1]}},
-  "2.4G|cal|2": {mode:"EHT", rate:"MCS13", v:{target:"18", pmin:"17", pmax:"19"}, chs:{20:[1], 40:[1]}},
+  "2.4G|cal":   {mode:"11b", rate:"11M", v:{target:"18", lo:"-1", hi:"1"}, chs:{20:[1]}},
+  "2.4G|cal|2": {mode:"EHT", rate:"MCS13", v:{target:"18", lo:"-1", hi:"1"}, chs:{20:[1]}},
   "2.4G|bf":    {mode:"VHT", rate:"MCS0", v:{target:"3", rxp:"-55", lo:"1", hi:"5"}, chs:{20:[7]}},
   "2.4G|rxcal": {mode:"VHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6"}, chs:{20:[7]}},
-  "2.4G|tx":    {mode:"EHT", rate:"MCS13", v:{target:"18", pwmin:"16.5", pwmax:"19.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:{20:[1,13], 40:[3,11]}},
+  "2.4G|tx":    {mode:"EHT", rate:"MCS13", v:{target:"18", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:{20:[1,13], 40:[3,11]}},
   "2.4G|per":   {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:{20:[1,13], 40:[3,11]}, ov:{40:{sens:"-50"}}},
   "2.4G|tp":    {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"300"}, chs:{20:[7]}},
-  "5G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"17", pmin:"16.5", pmax:"17.5"}, chs:TPL_C5},
+  "5G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"17", lo:"-0.5", hi:"0.5"}, chs:TPL_C5},
   "5G|bf":      {mode:"VHT", rate:"MCS0", v:{target:"5.5", rxp:"-55", lo:"2.5", hi:"15"}, chs:{20:[40,60,112]}},
   "5G|rxcal":   {mode:"VHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6"}, chs:{20:[40,60,124,153]}},
-  "5G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"17", pwmin:"15.5", pwmax:"18.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C5},
+  "5G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"17", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C5},
   "5G|per":     {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:TPL_C5, ov:{40:{sens:"-50"}, 80:{sens:"-47"}, 160:{sens:"-44"}}},
   "5G|tp":      {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"1300"}, chs:{80:[106]}},
-  "6G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"14", pmin:"13.5", pmax:"14.5"}, chs:TPL_C6, ov:{320:{target:"13", pmin:"12.5", pmax:"13.5"}}},
+  "6G|cal":     {mode:"EHT", rate:"MCS13", v:{target:"14", lo:"-0.5", hi:"0.5"}, chs:TPL_C6, ov:{320:{target:"13"}}},
   "6G|rxcal":   {mode:"EHT", rate:"MCS0", v:{rxp:"-70", lo:"-6", hi:"6"}, chs:{20:[13,45,77,109,141,173,209]}},
-  "6G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"14", pwmin:"12.5", pwmax:"15.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C6, ov:{320:{target:"13", pwmin:"11.5", pwmax:"14.5"}}},
+  "6G|tx":      {mode:"EHT", rate:"MCS13", v:{target:"14", pwlo:"-1.5", pwhi:"1.5", evm:"-38", felo:"-15", fehi:"15", mask:"2"}, chs:TPL_C6, ov:{320:{target:"13"}}},
   "6G|per":     {mode:"EHT", rate:"MCS13", v:{sens:"-53", per:"10"}, chs:TPL_C6, ov:{40:{sens:"-50"}, 80:{sens:"-47"}, 160:{sens:"-44"}, 320:{sens:"-41"}}},
   "6G|tp":      {mode:"EHT", rate:"auto", v:{rssi:"-40", rlo:"-50", rhi:"-30", tput:"2400"}, chs:{160:[47]}},
 };
@@ -367,7 +387,7 @@ function templateState(){
 let state = blankState();
 let band = "5G";                 // 左側目前看的頻段
 let cur = pidOf(band, "cal");    // 目前顯示的頁：頁 id 或 "overview"
-const ui = {pick:{}, ov:{}, dismiss:{}, fold:{}, notice:null};   // 介面展開／關閉狀態，不存檔
+const ui = {pick:{}, ov:{}, dismiss:{}, fold:{}, notice:null, backup:{}};   // backup：側欄一鍵清空前的內容，可再點恢復   // 介面展開／關閉狀態，不存檔
 
 /* ---------- 計算 ---------- */
 const rateList = (pid, mode) => (secOf(pid).auto ? ["auto"] : []).concat(MODES[mode].rates);
@@ -404,7 +424,6 @@ function validate(pid){
   const s = secOf(pid), d = state.sec[pid], errs = [], marks = new Set();
   if (untouched(pid)) return {errs, marks};
   const bad = (m, ...ks) => { errs.push(m); ks.forEach(k=>marks.add(k)); };
-  if (!d.chains.some(Boolean)) bad("至少要勾一個 Chain", "chains");
   if (s.dir && !d.dirs.TX && !d.dirs.RX) bad("至少要勾一個方向", "dirs");
   const bws = usedBws(d);
   if (!bws.length) { bad("還沒選任何頻道", "chs"); return {errs, marks}; }
@@ -419,9 +438,6 @@ function validate(pid){
     // 百分比欄位只能 0～100
     for (const f of s.fields) if (f.range && v[f.k] !== "" && (Number(v[f.k]) < f.range[0] || Number(v[f.k]) > f.range[1]))
       bad(`${isOv(d,b,f.k) ? b+"MHz：" : ""}${f.label} 要在 ${f.range[0]}～${f.range[1]} ${f.unit} 之間`, where(f.k));
-    if (s.targetIn) { const [lo, hi] = s.targetIn, t = v.target;
-      if (t !== "" && v[lo] !== "" && v[hi] !== "" && (Number(t) < Number(v[lo]) || Number(t) > Number(v[hi])))
-        bad(`${b}MHz：Target Power 要在 Power 上下限之間`, where("target"), where(lo), where(hi)); }
     if (s.atLeastOne && s.atLeastOne.every(k => v[k] === "")) bad(`至少要填一個測項規格`, ...s.atLeastOne.map(k=>"v:"+k));
   }
   return {errs:[...new Set(errs)], marks};
@@ -452,7 +468,9 @@ function renderSide(){
       <span class="nm">${titleOf(pid)}<small>${u?"未填（不測）":e?`${e} 個問題`:s.desc}</small></span>
       <span class="n">${u?"":n}</span></button>`;
   };
-  const statusIc = pid => untouched(pid) ? `<span class="ic todo"></span>` : validate(pid).errs.length ? `<span class="ic bad">!</span>` : `<span class="ic ok">✓</span>`;
+  const statusIc = pid => untouched(pid)
+    ? (ui.backup[pid] ? `<span class="ic todo" data-toggle="${pid}" title="點一下恢復剛才清空的內容"></span>` : `<span class="ic todo"></span>`)
+    : `<span class="ic ${validate(pid).errs.length ? "bad" : "ok"}" data-toggle="${pid}" title="點一下清空（這項不測）">${validate(pid).errs.length ? "!" : "✓"}</span>`;
   const groupItem = pid => {
     const n = pointsOf(pid).length, e = validate(pid).errs.length, u = untouched(pid), d = state.sec[pid];
     return `<button class="item sub${cur===pid?" on":""}${ui.justAdded === pid ? " new" : ""}" data-go="${pid}">${statusIc(pid)}
@@ -472,11 +490,26 @@ function renderSide(){
   $("side").classList.toggle("free", cur === "overview");
 }
 
-function fieldHtml(f, val, dataK, placeholder){
+// get(k)＝欄位值、kOf(k)＝data-k、phOf(k)＝提示字（例外區顯示共同規格）
+function fieldHtml(f, get, kOf, phOf, d){
+  if (f.rangeOf) return "";   // 上限跟下限畫在同一格
+  const mag = x => (x === "" || x == null) ? "" : String(Math.abs(Number(x)));
+  const inp = (k, neg) => { const ph = mag(phOf(k)); return `<input type="number" step="any" min="0" data-k="${kOf(k)}"${neg?" data-neg":""} value="${esc(mag(get(k)))}"${ph?` placeholder="${esc(ph)}"`:""}>`; };
+  if (f.rangeTo) return `<label class="fld">${f.rlabel}<span class="in"><b class="sg">−</b>${inp(f.k, true)}～<b class="sg">+</b>${inp(f.rangeTo)}<span class="u">${f.unit}</span></span></label>`;
+  const val = get(f.k), dataK = kOf(f.k), placeholder = phOf(f.k);
+  const off = f.tog && d && !d.on?.[f.tog];
+  // 固定下限（EVM -80、Mask 0）：顯示給大家看，不能改
+  if (f.fixLo != null) return `<label class="fld">${f.label}<span class="in"><b class="fx">${f.fixLo}</b>～<input type="number" step="any" data-k="${dataK}" value="${esc(val)}"${placeholder?` placeholder="${esc(placeholder)}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}><span class="u">${f.unit}</span></span></label>`;
   const ctl = f.type==="yn"
     ? `<select data-k="${dataK}">${placeholder!=null?`<option value="">同上</option>`:""}${opts(["Y","N"],val)}</select>`
-    : `<input type="number" step="any" data-k="${dataK}" value="${esc(val)}"${placeholder?` placeholder="${esc(placeholder)}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}>`;
-  return `<label class="fld">${f.label}<span class="in">${ctl}${f.unit?`<span class="u">${f.unit}</span>`:""}</span></label>`;
+    : `<input type="number" step="any" data-k="${dataK}" value="${esc(val)}"${placeholder?` placeholder="${esc(placeholder)}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}${off?" disabled":""}>`;
+  return `<label class="fld${off?" off":""}">${f.label}<span class="in">${ctl}${f.unit?`<span class="u">${f.unit}</span>`:""}</span></label>`;
+}
+
+// LO Leakage／Sym Clk 前面的勾選框（只畫在該組第一個欄位前）
+function togHtml(s, f, d){
+  const g = s.toggles?.find(g => g.keys[0] === f.k);
+  return g ? `<label class="fld"><span class="tl"><input type="checkbox" data-tog="${g.k}"${d.on?.[g.k]?" checked":""}>測 ${g.label}</span></label>` : "";
 }
 
 function renderMain(){
@@ -491,15 +524,15 @@ function renderMain(){
         ${s.dir?`<label class="fld">方向<span class="checks" data-k="dirs">${["TX","RX"].map(x=>`<label><input type="checkbox" data-dir="${x}"${d.dirs[x]?" checked":""}>${x}</label>`).join("")}</span></label>`:""}
         <label class="fld">802.11 Mode<span class="in"><select data-k="mode">${opts(Object.keys(BANDS[d.band].modes),d.mode)}</select></span></label>
         <label class="fld">Rate<span class="in"><select data-k="rate">${opts(rateList(pid,d.mode),d.rate)}</select></span></label>
-        <label class="fld">Chain<span class="checks" data-k="chains">${d.chains.map((c,j)=>`<label><input type="checkbox" data-chain="${j}"${c?" checked":""}>${j}</label>`).join("")}</span></label>
+        <label class="fld">Chain<span class="checks" data-k="chains">${d.chains.map((c,j)=>`<label><input type="checkbox" data-chain="${j}" checked disabled>${j}</label>`).join("")}</span></label>
       </div>
       <div class="grp-tools">${pid !== baseOf(pid) ? `<button class="link danger" data-delgroup>刪除這一組</button>` : ""}<button class="link" data-addgroup title="同一個測項要用不同的 Mode／Rate／Chain 時，新增一組">＋ 新增一組條件（不同 Mode／Rate）</button></div></div>
 
     <div class="step"><div class="step-t"><span class="no">2</span><h3>規格</h3>${s.specHint?`<span class="hint">${s.specHint}</span>`:""}</div>
-      <div class="fields">
-        ${s.fields.map(f=>fieldHtml(f, d.v[f.k], "v:"+f.k)).join("")}
-        ${s.derived?`<span class="derived" data-derived>${s.derived(d.v)}</span>`:""}
-      </div></div>
+      ${(s.rows || [[...s.fields.map(f=>f.k), "@derived"]]).map(row => `<div class="fields">${row.map(k => k === "|" ? `<span class="fgap"></span>` : k === "@derived"
+          ? (s.derived ? `<span class="derived" data-derived>${s.derived(d.v)}</span>` : "")
+          : (f => togHtml(s, f, d) + fieldHtml(f, k=>d.v[k], k=>"v:"+k, ()=>null, d))(s.fields.find(f => f.k === k))).join("")}</div>`).join("")}
+      </div>
 
     <div class="step" data-k="chs"><div class="step-t"><span class="no">3</span><h3>頻道</h3><span class="hint">點一下那一行就能展開選頻道，頻率自動對應</span></div>
       ${hiddenNote(d) && ui.dismiss[pid]!==hiddenNote(d)?`<div class="hidden-note"><span>⚠ ${esc(hiddenNote(d))}</span><button class="x" data-dismiss title="關閉提示">×</button></div>`:""}
@@ -525,10 +558,10 @@ function bwHtml(pid, b){
         ${picked.length?`<button class="link" data-ov="${b}">${ui.ov[k]?"收合例外":"此頻寬規格不同"}${n?`<span class="ov-tag">已設 ${n} 項</span>`:""}</button>`:""}
       </span></div>
     ${ui.pick[k]?`<div class="picker"><div class="chips">
-        ${BANDS[d.band].ch[b].map(ch=>`<label class="chip"><input type="checkbox" data-ch="${b}:${ch}"${bd.chs.includes(ch)?" checked":""}><span>${ch}<small>${freqOf(d.band,ch)}</small></span></label>`).join("")}
+        ${BANDS[d.band].ch[b].map(ch=>`<label class="chip"${chOk(d.band,b).includes(ch)?"":` title="${b}MHz 不能選 ch${ch}"`}><input type="checkbox" data-ch="${b}:${ch}"${bd.chs.includes(ch)?" checked":""}${chOk(d.band,b).includes(ch)?"":" disabled"}><span>${ch}<small>${freqOf(d.band,ch)}</small></span></label>`).join("")}
       </div><div class="picker-f"><button class="link" data-all="${b}">全選</button><button class="link" data-none="${b}">清除</button></div></div>`:""}
     ${ui.ov[k]&&picked.length?`<div class="ov"><div class="hint">只填 ${b} MHz 跟上面規格不一樣的，留空＝沿用</div><div class="fields">
-        ${s.fields.map(f=>fieldHtml(f, bd.ov[f.k], `ov:${b}:${f.k}`, f.type==="yn"?"":(d.v[f.k]||""))).join("")}
+        ${s.fields.map(f=>fieldHtml(f, k=>bd.ov[k], k=>`ov:${b}:${k}`, k=>f.type==="yn"?"":(d.v[k]||""), d)).join("")}
       </div></div>`:""}
   </div>`;
 }
@@ -570,14 +603,14 @@ function renderOverview(){
     <div class="step"><div class="tbl-wrap"><table>
       <thead><tr><th>測項</th><th class="nw">條件</th><th>規格</th><th class="nw">頻道</th><th class="nw">點數</th></tr></thead><tbody>${rows}</tbody></table></div></div>
     <div class="step">
-      <div class="sm" style="color:var(--muted)">下載的壓縮檔解開是資料夾 <b class="mono">${esc(packName())}</b>，裡面有 JSON、該儀器的測項檔和 LIMIT 檔和規格總表 Excel</div>
+      <div class="sm" style="color:var(--muted)">下載的壓縮檔解開是資料夾 <b class="mono">${esc(packName())}</b>，裡面有 JSON、該儀器的測項檔和 LIMIT 檔和需求表 Excel（Cover／2.4G／5G／6G／Throughput 工作表）</div>
       <div class="exp">${EXPORTERS.map(x=>`<div class="exp-card">
         <h4>${x.name}</h4><div class="sm">${x.desc}</div>
         <button class="btn primary" data-exp="${x.key}">下載（${x.show ?? x.file}＋JSON）</button></div>`).join("")}</div>
       <details style="margin-top:14px"><summary>逐點明細</summary><div class="tbl-wrap" style="margin-top:8px">${detailTables()}</div></details>
     </div>`;
   const okToGo = () => !errs.length || confirm(`還有 ${errs.length} 個問題，仍要下載？`);
-  // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）＋規格總表
+  // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）＋需求表
   $("main").querySelectorAll("[data-exp]").forEach(b => b.onclick = () => {
     if (!o.rows.length) return alert("還沒有選任何頻道，沒有東西可以下載");
     if (!okToGo()) return;
@@ -587,7 +620,7 @@ function renderOverview(){
       {name:`${name}/${name}_RFreq.json`, data:JSON.stringify(o,null,2)},
       {name:`${name}/${x.file}`, data:r.text},
       ...(r.extra || []).map(f => ({name:`${name}/${f.file}`, data:f.data})),
-      {name:`${name}/${name}_規格總表.xlsx`, data:buildXlsx(o)}]);
+      {name:`${name}/${name}_需求表.xlsx`, data:buildXlsx(o)}]);
     download(`${name}.zip`, zip, "application/zip");
   });
 }
@@ -621,7 +654,7 @@ function makeZip(files){
     .forEach(([i,v,n]) => n===4 ? e.setUint32(i,v,true) : e.setUint16(i,v,true));
   return [...parts, ...dir, e];
 }
-// zip 的各段接成一個 Uint8Array（規格總表.xlsx 本身也是 zip，要放進外層 zip）
+// zip 的各段接成一個 Uint8Array（需求表.xlsx 本身也是 zip，要放進外層 zip）
 function zipBytes(parts){
   const u = parts.map(p => new Uint8Array(p.buffer, p.byteOffset, p.byteLength));
   const out = new Uint8Array(u.reduce((a,x) => a + x.length, 0));
@@ -629,30 +662,39 @@ function zipBytes(parts){
   return out;
 }
 
-/* ---------- 規格總表.xlsx：給 MT 對照、自己改 LIMIT 檔 ----------
-   LIMIT 是照「頻段＋Mode＋頻寬＋Rate」分的、跟頻道無關，所以條件和規格都一樣的頻道合成一列；
-   一個測項一塊，塊裡依頻段排；規格欄照範本的名稱，Tx 的 Power／Freq 上下限拉成單層 */
+/* ---------- 需求表.xlsx：照 NEW 版範本的版面（主管要的舊格式），給 MT 看 RD 的完整需求 ----------
+   Cover／各頻段頁（5 個區塊）／Throughput；共用欄 B～I，規格欄接在後面；Tx 照範本兩層表頭 */
+const XL_COMMON = ["test item","IEEE 802.11","channel","Center\nFrequency\n(MHz)","Rate","Chain 0","Chain 1","Chain 2","Chain 3"];
 const limOf = (r, item) => r.limits.find(x => x.item === item) || {};
 const relOf = (r, item) => limOf(r, item).relative || limOf(r, item);
+// cols：[表頭, 每列的值（陣列，跟表頭欄數一樣）, 選填（整頁都沒填就不出這欄）]
 const XL_SECTIONS = {
-  cal:  {title:"Calibrate Power", head:["Target Power (dBm)","Power lower limit (dB)","Power upper limit (dB)"],
-         vals:r => [r.params.target_power_dbm, relOf(r,"Power").lsl, relOf(r,"Power").usl]},
-  bf:   {title:"TX BF Calibration", head:["Target Power (dBm)","DUT Rx Power (dBm)","Pass lower limit","Pass upper limit"],
-         vals:r => [r.params.target_power_dbm, r.params.dut_rx_power_dbm, limOf(r,"iBF Power").lsl, limOf(r,"iBF Power").usl]},
-  rxcal:{title:"RX Gain Error Calibration & Verification", head:["DUT Rx Power (dBm)","Criteria low","Criteria high"],
-         vals:r => [r.params.dut_rx_power_dbm, limOf(r,"Rx Gain Error").lsl, limOf(r,"Rx Gain Error").usl]},
-  tx:   {ver:true, specFill:true, title:"Tx Verification (Power, EVM, Frequency accuracy)",
-         head:["Target Power (dBm)","Power Accuracy lower (dB)","Power Accuracy upper (dB)","EVM upper (dB)",
-               "Freq Accuracy lower (ppm)","Freq Accuracy upper (ppm)","Spectrum Mask upper (%)",
-               "LO Leakage upper (dB)","Sym Clk Error lower (ppm)","Sym Clk Error upper (ppm)"],
-         vals:r => [r.params.target_power_dbm, relOf(r,"Power").lsl, relOf(r,"Power").usl, limOf(r,"EVM").usl,
-                    limOf(r,"Freq Error").lsl, limOf(r,"Freq Error").usl, limOf(r,"Spectrum Mask").usl,
-                    limOf(r,"LO Leakage").usl, limOf(r,"Sym Clk Error").lsl, limOf(r,"Sym Clk Error").usl]},
-  per:  {ver:true, title:"Rx PER", head:["Sensitivity (dBm)","PER upper limit (%)"],
-         vals:r => [r.params.sensitivity_dbm, limOf(r,"PER").usl]},
-  tp:   {ver:true, dir:true, title:"Throughput", head:["RSSI (dBm)","RSSI lower limit (dBm)","RSSI upper limit (dBm)","Throughput lower limit (Mbps)"],
-         vals:r => [r.params.rssi_dbm, limOf(r,"RSSI").lsl, limOf(r,"RSSI").usl, limOf(r,"Throughput").lsl]}
+  cal:  {label:"Calibrate Power", cols:[
+          ["Target Power (dBm)", r => [r.params.target_power_dbm]],
+          ["lower limit", r => [relOf(r,"Power").lsl]], ["Upper limit", r => [relOf(r,"Power").usl]]]},
+  bf:   {cols:[
+          ["Target Power (dBm)", r => [r.params.target_power_dbm]], ["DUT Rx Power(dBm)", r => [r.params.dut_rx_power_dbm]],
+          ["Pass lower limit", r => [limOf(r,"iBF Power").lsl]], ["Pass upper limit", r => [limOf(r,"iBF Power").usl]]]},
+  rxcal:{label:"RX Gain Error Calibration\n& Verification", cols:[
+          ["DUT Rx Power(dBm)", r => [r.params.dut_rx_power_dbm]],
+          ["Criteria low", r => [limOf(r,"Rx Gain Error").lsl]], ["Criteria High", r => [limOf(r,"Rx Gain Error").usl]]]},
+  tx:   {ver:true, label:"Tx\n(Power, EVM, Frequency accuracy)", cols:[
+          ["Target Power (dBm)", r => [r.params.target_power_dbm]],
+          [["Power Accuracy (dB)",["lower limit","Upper limit"]], r => [relOf(r,"Power").lsl, relOf(r,"Power").usl]],
+          [["EVM (dB)",["Upper limit"]], r => [limOf(r,"EVM").usl]],
+          [["Frequency Accuracy (ppm)",["lower limit","Upper limit"]], r => [limOf(r,"Freq Error").lsl, limOf(r,"Freq Error").usl]],
+          [["Spectrum Mask (%)",["Upper limit"]], r => [limOf(r,"Spectrum Mask").usl]],
+          [["LO Leakage (dB)",["Upper limit"]], r => [limOf(r,"LO Leakage").usl], true],
+          [["Sym Clk Error (ppm)",["lower limit","Upper limit"]], r => [limOf(r,"Sym Clk Error").lsl, limOf(r,"Sym Clk Error").usl], true]]},
+  per:  {ver:true, label:"Rx PER", cols:[
+          ["Sensitivity (dBm)", r => [r.params.sensitivity_dbm]], ["PER\nUpper limit\n(%)", r => [limOf(r,"PER").usl]]]},
+  tp:   {ver:true, vYellow:true, cols:[
+          ["RSSI\n(dBm)", r => [r.params.rssi_dbm]], ["RSSI lower limit\n(dBm)", r => [limOf(r,"RSSI").lsl]],
+          ["RSSI upper limit\n(dBm)", r => [limOf(r,"RSSI").usl]], ["Throughput\nlower limit\n(Mbps)", r => [limOf(r,"Throughput").lsl]]]}
 };
+// 範本的寫法：IEEE 802.11 欄 EHT20／11b，Rate 欄 EHT MCS13／MCS0／11M
+const xlMode = r => LEGACY.includes(r.mode) ? r.mode : `${r.mode}${r.bandwidth_mhz}`;
+const xlRate = r => LEGACY.includes(r.mode) || r.rate === "auto" ? r.rate : `${["HE","EHT"].includes(r.mode) ? r.mode + " " : ""}${r.rate}`;
 const colName = n => { let s = ""; for (n++; n; n = Math.floor((n-1)/26)) s = String.fromCharCode(65 + (n-1) % 26) + s; return s; };
 const xmlEsc = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
@@ -663,7 +705,8 @@ function xlSheet(){
     set(r, c, v, s){ (cells[r] ??= [])[c] = {v, s}; },
     merge(r1, c1, r2, c2){ if (r1 !== r2 || c1 !== c2) merges.push(`${colName(c1)}${r1+1}:${colName(c2)}${r2+1}`); } };
 }
-function sheetXml(sh, widths){
+// zoom：打開時的縮放比例，照範本（Cover 80%、頻段頁 55%、Throughput 67%）
+function sheetXml(sh, widths, zoom = 100){
   const rows = sh.cells.map((row, r) => row ? `<row r="${r+1}">` + row.map((c, j) => {
     if (!c) return "";
     const ref = `${colName(j)}${r+1}`, st = c.s ? ` s="${c.s}"` : "";
@@ -673,13 +716,14 @@ function sheetXml(sh, widths){
   }).join("") + `</row>` : "").join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView workbookViewId="0" zoomScale="${zoom}" zoomScaleNormal="${zoom}"/></sheetViews>
 <cols>${widths.map((w,i) => `<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("")}</cols>
 <sheetData>${rows}</sheetData>${sh.merges.length ? `<mergeCells count="${sh.merges.length}">${sh.merges.map(m => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : ""}
 </worksheet>`;
 }
 // 顏色照範本：校正類表頭淺藍、驗證類表頭淺青、Tx 規格表頭淺黃；Chain 的 V 校正類黃、驗證類淺綠
 // 樣式編號：1 標題 2 校正表頭 3 驗證表頭 4 Tx 規格表頭 5 一般格 6 置中換行 7 黃 8 淺綠 9 橘 10 綠 11 區塊標題 12 頻道清單
-const XL_FILLS = ["D9E1F2","CCFFFF","FFF2CC","FFFF00","E2EFDA","FFC000","92D050"];
+const XL_FILLS = ["DAE3F3","CCFFFF","FFF2CC","FFFF00","E2F0D9","FFC000","92D050"];   // 色碼照範本實際換算
 const XL_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <fonts count="3"><font><sz val="12"/><name val="Arial"/></font><font><sz val="18"/><color rgb="FF0066CC"/><name val="Arial"/></font><font><b/><sz val="12"/><name val="Arial"/></font></fonts>
@@ -697,37 +741,59 @@ ${[5,6,7,8].map(f => `<xf numFmtId="0" fontId="0" fillId="${f}" borderId="1" xfI
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 
-// 一個測項一塊：條件（頻段／Mode／頻寬／Rate／Chain／方向）和規格全部一樣的頻道合成一列
-function specSheet(o){
+// 一個頻段頁（或 Throughput 頁）：有資料的區塊依序往下排，區塊之間空一列
+function bandSheet(title, rows, keys){
   const sh = xlSheet(); let r = 0;
-  sh.set(r, 1, "RF 測試規格總表", 1); r += 2;
-  [["Project", o.project], ["Revision", o.revision], ["RD", o.rd], ["Date", o.date]]
-    .forEach(([k, v]) => { sh.set(r, 1, k, 9); sh.set(r, 2, v || "", 5); r++; });
-  r++;
-  for (const key of Object.keys(XL_SECTIONS)) {
-    const sec = XL_SECTIONS[key], list = o.rows.filter(x => x.test_key === key); if (!list.length) continue;
-    const merged = new Map();
-    for (const x of list) {
-      const cond = [x.band, x.mode, x.bandwidth_mhz, x.rate, x.chains.join(",")], dir = sec.dir ? [x.direction === "TX" ? "Tx" : "Rx"] : [];
-      const k = JSON.stringify([cond, dir, sec.vals(x)]);
-      if (!merged.has(k)) merged.set(k, {cond, dir, vals:sec.vals(x), chs:[]});
-      if (!merged.get(k).chs.includes(x.channel)) merged.get(k).chs.push(x.channel);
+  sh.set(r, 1, title, 1); r += 2;
+  for (const key of keys) {
+    const list = rows.filter(x => x.test_key === key); if (!list.length) continue;
+    const sec = XL_SECTIONS[key];
+    // 選填欄（LO Leakage、Sym Clk）這頁都沒填就不出
+    const cols = sec.cols.filter(([, f, opt]) => !opt || list.some(x => f(x).some(v => v != null)));
+    const head = cols.map(c => c[0]), two = head.some(Array.isArray), h = two ? 2 : 1;
+    const hs = sec.ver ? 3 : 2, vs = sec.ver && !sec.vYellow ? 8 : 7;   // 表頭色、V 的底色
+    // 表頭：兩層的上層橫向合併；單層的在兩層區塊裡上下合併
+    let c = 1;
+    for (const t of [...XL_COMMON, ...head]) {
+      if (Array.isArray(t)) {
+        sh.set(r, c, t[0], 4);
+        t[1].forEach((sub, k) => { if (k) sh.set(r, c + k, "", 4); sh.set(r + 1, c + k, sub, 4); });
+        sh.merge(r, c, r, c + t[1].length - 1); c += t[1].length;
+      } else {
+        sh.set(r, c, t, hs); if (two) sh.set(r + 1, c, "", hs);
+        sh.merge(r, c, r + h - 1, c); c++;
+      }
     }
-    sh.set(r, 1, sec.title, 11); r++;
-    // Channel 固定在第 6 欄（最寬那欄），Throughput 的 Direction 接在後面
-    const head = ["Band", "IEEE 802.11", "BW (MHz)", "Rate", "Chain", "Channel", ...(sec.dir ? ["Direction"] : []), ...sec.head];
-    const nCond = head.length - sec.head.length, hs = sec.ver ? 3 : 2;
-    head.forEach((t, j) => sh.set(r, 1 + j, t, j >= nCond && sec.specFill ? 4 : hs)); r++;
-    for (const m of merged.values()) {
-      [...m.cond, m.chs.join(", "), ...m.dir, ...m.vals].forEach((v, j) => sh.set(r, 1 + j, v ?? "", j === 5 ? 12 : 5));
-      r++;
-    }
-    r++;
+    r += h;
+    // 資料列：一個頻道一列（Throughput 是一個方向一列）；test item 欄整塊合併
+    const label = sec.label ?? list[0].test;
+    list.forEach((x, i) => {
+      const vals = [key === "tp" ? (x.direction === "TX" ? "Tx" : "Rx") : (i ? "" : label), xlMode(x), x.channel, x.freq_mhz, xlRate(x),
+        ...[0,1,2,3].map(k => x.chains.includes(k) ? "V" : ""), ...cols.flatMap(([, f]) => f(x))];
+      vals.forEach((v, j) => sh.set(r + i, 1 + j, v ?? "", j === 0 ? 6 : v === "V" ? vs : 5));
+    });
+    if (key !== "tp") sh.merge(r, 1, r + list.length - 1, 1);
+    r += list.length + 1;
   }
   return sh;
 }
 function buildXlsx(o){
-  const sheets = [["規格總表", sheetXml(specSheet(o), [3, 13, 13, 11, 10, 11, 40, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18])]];
+  const sheets = [];
+  const cv = xlSheet();
+  // Cover 照範本：Project 橘底、版本表綠底表頭
+  cv.set(0, 1, "RF MFG Request", 1);
+  cv.set(2, 1, "Project:", 9); cv.set(2, 2, o.project || "", 5); cv.set(2, 3, "", 5); cv.merge(2, 2, 2, 3);
+  cv.set(3, 1, "Band:", 9); cv.set(3, 2, o.bands.join(" / "), 5); cv.set(3, 3, "", 5); cv.merge(3, 2, 3, 3);
+  ["Rev","Date","Change List","Issue by"].forEach((t, j) => cv.set(5, 1 + j, t, 10));
+  [o.revision, o.date, "", o.rd].forEach((v, j) => cv.set(6, 1 + j, v || "", 5));
+  sheets.push(["Cover", sheetXml(cv, [3, 18, 18, 60, 18], 80)]);
+  const w = [3, 30, 14, 10, 13, 18, 9, 9, 9, 9, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15];
+  for (const b of BAND_KEYS) {
+    const rows = o.rows.filter(x => x.band === b && x.test_key !== "tp");
+    if (rows.length) sheets.push([b, sheetXml(bandSheet(`${o.project || ""} RF MFG Request - ${b}`.trim(), rows, ["cal","bf","rxcal","tx","per"]), w, 55)]);
+  }
+  const tp = o.rows.filter(x => x.test_key === "tp");
+  if (tp.length) sheets.push(["Throughput", sheetXml(bandSheet("Throughput", tp, ["tp"]), w, 67)]);
   const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
   const NS = "http://schemas.openxmlformats.org", REL = `${NS}/officeDocument/2006/relationships`;
   const files = [
@@ -790,7 +856,7 @@ const powerLim = r => r.limits.find(l => l.item === "Power");
 const LEGACY = ["11a","11b","11g"];
 const isTx = r => r.test_key === "tx", isRx = r => r.test_key === "per", isCal = r => r.test_key === "cal";
 // 給 MT 的提醒只寫網頁推測的寫法、沒寫進測項檔的項目
-// （RD 要求的規格數字都在規格總表.xlsx，也照範例檔改好 LIMIT 一起下載）
+// （RD 要求的規格數字都在需求表.xlsx，也照範例檔改好 LIMIT 一起下載）
 function commonNotes(o, unsupported){
   const notes = [];
   for (const [key, why] of unsupported) {
@@ -1016,7 +1082,7 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("input", e => {
   const t = e.target; if (t.type!=="number" || !t.dataset.k || cur==="overview") return;
-  setByKey(state.sec[cur], t.dataset.k, t.value);
+  setByKey(state.sec[cur], t.dataset.k, t.hasAttribute("data-neg") && t.value !== "" ? String(-Number(t.value)) : t.value);
   update(false);
 });
 document.addEventListener("change", e => {
@@ -1027,14 +1093,26 @@ document.addEventListener("change", e => {
     t.checked ? chs.push(ch) : chs.splice(chs.indexOf(ch),1);
     return update(true);
   }
-  if (t.dataset.chain != null) { d.chains[+t.dataset.chain] = t.checked; return update(false); }
   if (t.dataset.dir) { d.dirs[t.dataset.dir] = t.checked; return update(false); }
+  if (t.dataset.tog) {
+    d.on[t.dataset.tog] = t.checked;
+    if (!t.checked) for (const k of secOf(cur).toggles.find(g => g.k === t.dataset.tog).keys) { d.v[k] = ""; BWS.forEach(b => delete d.bw[b].ov[k]); }
+    return update(true);
+  }
   if (!t.dataset.k) return;
   setByKey(d, t.dataset.k, t.value);
   if (t.dataset.k==="mode" && !rateList(cur,d.mode).includes(d.rate)) d.rate = rateList(cur,d.mode)[0];
   update(t.dataset.k==="mode" || t.dataset.k==="rate");
 });
 document.addEventListener("click", e => {
+  // 側欄 ✓：清空這個測項（不測）；清空後再點一次恢復
+  const tg = e.target.closest("[data-toggle]");
+  if (tg) {
+    const pid = tg.dataset.toggle;
+    if (untouched(pid)) { if (ui.backup[pid]) { state.sec[pid] = ui.backup[pid]; delete ui.backup[pid]; } }
+    else { ui.backup[pid] = state.sec[pid]; state.sec[pid] = blankSec(pid); }
+    renderSide(); if (cur !== "overview") renderMain(); return;
+  }
   // 點頻寬那一行（除了「此頻寬規格不同」）就展開／收合頻道選擇
   const row = e.target.closest("[data-bwrow]");
   if (row && !e.target.closest("[data-ov]") && cur !== "overview") {
@@ -1067,7 +1145,7 @@ document.addEventListener("click", e => {
   if (t.hasAttribute("data-dismiss")) ui.dismiss[cur] = hiddenNote(d);   // 記住關掉的是哪一則，內容變了會再出現
   else if (t.dataset.pick) { const k=`${cur}:${t.dataset.pick}`; ui.pick[k] = !ui.pick[k]; }
   else if (t.dataset.ov) { const k=`${cur}:${t.dataset.ov}`; ui.ov[k] = !ui.ov[k]; }
-  else if (t.dataset.all) d.bw[t.dataset.all].chs = [...BANDS[d.band].ch[t.dataset.all]];
+  else if (t.dataset.all) d.bw[t.dataset.all].chs = chOk(d.band, t.dataset.all);
   else if (t.dataset.none) d.bw[t.dataset.none].chs = [];
   else return;
   update(true);
@@ -1075,10 +1153,10 @@ document.addEventListener("click", e => {
 
 $("b-tpl").onclick = () => {
   if (!confirm("範本將覆蓋目前填的測項（Project、姓名不變），確定嗎？")) return;
-  state = {meta:state.meta, sec:templateState().sec}; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {};
+  state = {meta:state.meta, sec:templateState().sec}; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {}; ui.backup = {};
   if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true);
 };
-$("b-clear").onclick = () => { if (confirm("會清空所有內容，確定嗎？")) { state = blankState(); refreshPages(); if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
+$("b-clear").onclick = () => { if (confirm("會清空所有內容，確定嗎？")) { state = blankState(); refreshPages(); ui.backup = {}; if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
 ["project","rd","date","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
   state.meta[k] = e.target.value;
   if (cur === "overview") renderOverview();   // 總覽頁標題跟著更新
@@ -1110,8 +1188,8 @@ async function jsonFromZip(buf){
 // R0A → R0B；最後一碼不是 A～Y 就維持原樣讓 RD 自己改
 const nextRev = r => /^(.*?)([A-Y])$/.test(r || "") ? r.slice(0, -1) + String.fromCharCode(r.charCodeAt(r.length - 1) + 1) : (r || "");
 // 檔案裡的表單狀態逐欄檢查後才放回來（只收認得的欄位、合法的 Mode／Rate／頻道）
-// 以前的檔案 Power 存的是 Target 加減的誤差，開啟時換成上下限
-const OLD_PWR = {cal:["lo","hi","pmin","pmax"], tx:["pwlo","pwhi","pwmin","pwmax"]};
+// 10/30～11/6 的檔案 Power 存的是上下限（dBm），開啟時換回 Target 加減的誤差
+const OLD_PWR = {cal:["pmin","pmax","lo","hi"], tx:["pwmin","pwmax","pwlo","pwhi"]};
 function oldPower(pid, x){
   const m = OLD_PWR[pid.split("|")[1]], v = x.v || {};
   if (!m || !(m[0] in v || m[1] in v)) return;
@@ -1120,9 +1198,9 @@ function oldPower(pid, x){
     const ov = x.bw?.[b]?.ov;
     if (!ov || !["target", lo, hi].some(k => k in ov)) continue;
     const t = ov.target ?? v.target;
-    ov[mn] = String(add(t, ov[lo] ?? v[lo]) ?? ""); ov[mx] = String(add(t, ov[hi] ?? v[hi]) ?? "");
+    ov[mn] = String(sub(ov[lo] ?? v[lo], t) ?? ""); ov[mx] = String(sub(ov[hi] ?? v[hi], t) ?? "");
   }
-  v[mn] = String(add(v.target, v[lo]) ?? ""); v[mx] = String(add(v.target, v[hi]) ?? "");
+  v[mn] = String(sub(v[lo], v.target) ?? ""); v[mx] = String(sub(v[hi], v.target) ?? "");
 }
 function restoreDraft(dr){
   const st = blankState();
@@ -1133,7 +1211,7 @@ function restoreDraft(dr){
     const mode = modes[x.mode] ? x.mode : "EHT";
     const chs = {}, ov = {};
     for (const b of BWS) {
-      const ok = BANDS[band].ch[b] || [];
+      const ok = chOk(band, b);
       chs[b] = (x.bw?.[b]?.chs || []).map(Number).filter(c => ok.includes(c));
       ov[b] = Object.fromEntries(Object.entries(x.bw?.[b]?.ov || {}).filter(([k]) => secOf(pid).fields.some(f => f.k === k)).map(([k, val]) => [k, String(val ?? "")]));
     }
@@ -1151,10 +1229,10 @@ function restoreDraft(dr){
 // 舊版檔案（沒有存表單原始狀態）：從測試點清單倒推回表單，猜不準的地方回傳提醒
 // 每列的 id 是「頻段-測項-序號」（例：5G-CAL-001），用它找回是哪一頁
 const ROW_TO_FIELDS = {
-  cal:  r => ({target:r.params?.target_power_dbm, pmin:limOf(r,"Power").lsl, pmax:limOf(r,"Power").usl}),
+  cal:  r => ({target:r.params?.target_power_dbm, lo:relOf(r,"Power").lsl, hi:relOf(r,"Power").usl}),
   bf:   r => ({target:r.params?.target_power_dbm, rxp:r.params?.dut_rx_power_dbm, lo:limOf(r,"iBF Power").lsl, hi:limOf(r,"iBF Power").usl}),
   rxcal:r => ({rxp:r.params?.dut_rx_power_dbm, lo:limOf(r,"Rx Gain Error").lsl, hi:limOf(r,"Rx Gain Error").usl}),
-  tx:   r => ({target:r.params?.target_power_dbm, pwmin:limOf(r,"Power").lsl, pwmax:limOf(r,"Power").usl, evm:limOf(r,"EVM").usl,
+  tx:   r => ({target:r.params?.target_power_dbm, pwlo:relOf(r,"Power").lsl, pwhi:relOf(r,"Power").usl, evm:limOf(r,"EVM").usl,
                felo:limOf(r,"Freq Error").lsl, fehi:limOf(r,"Freq Error").usl, mask:limOf(r,"Spectrum Mask").usl,
                lol:limOf(r,"LO Leakage").usl, sclo:limOf(r,"Sym Clk Error").lsl, schi:limOf(r,"Sym Clk Error").usl}),
   per:  r => ({sens:r.params?.sensitivity_dbm, per:limOf(r,"PER").usl}),
@@ -1186,7 +1264,7 @@ function legacyDraft(o){
     const per = {};
     for (const r of rows) {
       const b = Number(r.bandwidth_mhz), v = strV(ROW_TO_FIELDS[key](r));
-      if (!(BANDS[bandOf(pid)].ch[b] || []).includes(Number(r.channel))) { notes.push(`${name}：${b}MHz ch${r.channel} 不是有效頻道，已略過`); continue; }
+      if (!chOk(bandOf(pid), b).includes(Number(r.channel))) { notes.push(`${name}：${b}MHz ch${r.channel} 不是有效頻道，已略過`); continue; }
       const g = per[b] ??= {chs:[], v, mixed:false};
       if (!g.chs.includes(Number(r.channel))) g.chs.push(Number(r.channel));
       if (!sameV(g.v, v)) g.mixed = true;
@@ -1203,7 +1281,7 @@ function legacyDraft(o){
     if (bws.length > 1 && bws.some(b => Object.keys(bw[b].ov).length))
       notes.push(`${name}：舊檔沒記錄哪些是共同規格、哪些是例外，已用 ${base}MHz 的值當共同規格，其他頻寬不一樣的地方設成「此頻寬規格不同」，請確認`);
     const dirs = key === "tp" ? {TX:rows.some(r => r.direction === "TX"), RX:rows.some(r => r.direction === "RX")} : undefined;
-    sec[pid] = {mode:first.mode, rate:first.rate, chains, dirs, v, bw};
+    sec[pid] = {mode:first.mode, rate:first.rate, chains:[true,true,true,true], dirs, v, bw};
   }
   return {draft:{meta:{project:o.project, rd:o.rd, rev:o.revision, date:o.date}, sec}, notes:[...new Set(notes)]};
 }
@@ -1220,7 +1298,7 @@ $("f-open").onchange = async e => {
     const busy = state.meta.project || PAGES.some(p => !untouched(p));
     if (busy && !confirm("畫面上已經有填寫的內容，開啟舊檔會覆蓋掉，確定嗎？")) return;
     const {st, oldRev} = restoreDraft(legacyOne ? legacyOne.draft : o.draft);
-    state = st; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {};
+    state = st; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {}; ui.backup = {};
     band = BAND_KEYS.find(b => pagesIn(b).some(p => !untouched(p))) || BAND_KEYS[0];
     cur = "overview"; syncMeta(); update(true);
     // 舊版檔案有猜不準的地方、或檔案裡有網頁還沒支援的頻段（例如 6G），才出通知
