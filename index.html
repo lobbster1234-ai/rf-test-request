@@ -177,6 +177,8 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
   <div class="spacer"></div>
   <button class="btn" id="b-open" title="選之前下載的 zip 或 JSON，載入後改版">開啟舊檔</button>
   <input type="file" id="f-open" accept=".zip,.json" hidden>
+  <button class="btn" id="b-check" title="MT 用：選 RD 給的 zip，檢查裡面的需求表 Excel 有沒有被改過">檢查需求表</button>
+  <input type="file" id="f-check" accept=".zip" hidden>
   <button class="btn" id="b-tpl" title="重新填回 NEW 範本">套用範本</button>
   <button class="btn" id="b-clear">清空</button>
 </header>
@@ -664,6 +666,7 @@ function zipBytes(parts){
 
 /* ---------- 需求表.xlsx：照 NEW 版範本的版面（主管要的舊格式），給 MT 看 RD 的完整需求 ----------
    Cover／各頻段頁（5 個區塊）／Throughput；共用欄 B～I，規格欄接在後面；Tx 照範本兩層表頭 */
+const XLSX_FORMAT = 2;   // 11/6 改回範本版面＋上鎖
 const XL_COMMON = ["test item","IEEE 802.11","channel","Center\nFrequency\n(MHz)","Rate","Chain 0","Chain 1","Chain 2","Chain 3"];
 const limOf = (r, item) => r.limits.find(x => x.item === item) || {};
 const relOf = (r, item) => limOf(r, item).relative || limOf(r, item);
@@ -705,6 +708,12 @@ function xlSheet(){
     set(r, c, v, s){ (cells[r] ??= [])[c] = {v, s}; },
     merge(r1, c1, r2, c2){ if (r1 !== r2 || c1 !== c2) merges.push(`${colName(c1)}${r1+1}:${colName(c2)}${r2+1}`); } };
 }
+// 保護密碼：每份檔案隨機產生雜湊，沒有人知道密碼（網頁是公開的，寫死密碼等於公開）
+// RD 要改需求一律回網頁「開啟舊檔」改版；MT 只看不改
+const b64 = u => btoa(String.fromCharCode(...u));
+const randB64 = n => b64(crypto.getRandomValues(new Uint8Array(n)));
+// 鎖住：不能改、不能選取（所以也複製不了）、不能插刪列欄
+const XL_PROTECT = () => `<sheetProtection algorithmName="SHA-512" hashValue="${randB64(64)}" saltValue="${randB64(16)}" spinCount="100000" sheet="1" objects="1" scenarios="1" selectLockedCells="1" selectUnlockedCells="1"/>`;
 // zoom：打開時的縮放比例，照範本（Cover 80%、頻段頁 55%、Throughput 67%）
 function sheetXml(sh, widths, zoom = 100){
   const rows = sh.cells.map((row, r) => row ? `<row r="${r+1}">` + row.map((c, j) => {
@@ -718,7 +727,7 @@ function sheetXml(sh, widths, zoom = 100){
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetViews><sheetView workbookViewId="0" zoomScale="${zoom}" zoomScaleNormal="${zoom}"/></sheetViews>
 <cols>${widths.map((w,i) => `<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("")}</cols>
-<sheetData>${rows}</sheetData>${sh.merges.length ? `<mergeCells count="${sh.merges.length}">${sh.merges.map(m => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : ""}
+<sheetData>${rows}</sheetData>${XL_PROTECT()}${sh.merges.length ? `<mergeCells count="${sh.merges.length}">${sh.merges.map(m => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : ""}
 </worksheet>`;
 }
 // 顏色照範本：校正類表頭淺藍、驗證類表頭淺青、Tx 規格表頭淺黃；Chain 的 V 校正類黃、驗證類淺綠
@@ -800,7 +809,7 @@ function buildXlsx(o){
     {name:"[Content_Types].xml", data:X + `<Types xmlns="${NS}/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>`
       + sheets.map((_,i) => `<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("") + `</Types>`},
     {name:"_rels/.rels", data:X + `<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
-    {name:"xl/workbook.xml", data:X + `<workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${REL}"><sheets>`
+    {name:"xl/workbook.xml", data:X + `<workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${REL}"><workbookProtection workbookAlgorithmName="SHA-512" workbookHashValue="${randB64(64)}" workbookSaltValue="${randB64(16)}" workbookSpinCount="100000" lockStructure="1"/><sheets>`
       + sheets.map(([n],i) => `<sheet name="${xmlEsc(n)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join("") + `</sheets></workbook>`},
     {name:"xl/_rels/workbook.xml.rels", data:X + `<Relationships xmlns="${NS}/package/2006/relationships">`
       + sheets.map((_,i) => `<Relationship Id="rId${i+1}" Type="${REL}/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join("")
@@ -842,7 +851,7 @@ function buildOutput(){
       });
     });
   }
-  return {schema:"rf-requirement/0.3", project:state.meta.project, revision:state.meta.rev,
+  return {schema:"rf-requirement/0.3", xlsx_format:XLSX_FORMAT, project:state.meta.project, revision:state.meta.rev,
           rd:state.meta.rd, date:state.meta.date,
           bands:BAND_KEYS.filter(b=>out.some(r=>r.band===b)), rows:out,
           draft:{meta:state.meta, sec:state.sec}};   // 表單原始狀態：開啟舊檔時原樣還原（共同規格／例外分得清楚）
@@ -1164,9 +1173,9 @@ $("b-clear").onclick = () => { if (confirm("會清空所有內容，確定嗎？
 function syncMeta(){ ["project","rd","date","rev"].forEach(k => $("m-"+k).value = state.meta[k] ?? ""); }
 
 /* ---------- 開啟舊檔：選之前下載的 zip 或 JSON，把表單原樣填回來改版 ---------- */
-// 從 zip 裡找出 *_RFreq.json（自己產的 zip 沒壓縮；被 Windows 重新壓過的用瀏覽器內建的解壓）
-async function jsonFromZip(buf){
-  const u = new Uint8Array(buf), v = new DataView(buf);
+// 讀 zip：回傳 [{name, read()}]，read() 取出內容（自己產的 zip 沒壓縮；被 Windows 重新壓過的用瀏覽器內建的解壓）
+function zipList(buf){
+  const u = new Uint8Array(buf), v = new DataView(buf), list = [];
   let e = u.length - 22;
   while (e >= 0 && v.getUint32(e, true) !== 0x06054b50) e--;
   if (e < 0) throw new Error("壓縮檔格式不正確");
@@ -1175,15 +1184,21 @@ async function jsonFromZip(buf){
     const method = v.getUint16(p + 10, true), size = v.getUint32(p + 20, true), nl = v.getUint16(p + 28, true);
     const extra = v.getUint16(p + 30, true), cmt = v.getUint16(p + 32, true), off = v.getUint32(p + 42, true);
     const name = new TextDecoder().decode(u.subarray(p + 46, p + 46 + nl));
-    if (/_RFreq\.json$/.test(name)) {
+    list.push({name, read: async () => {
       const start = off + 30 + v.getUint16(off + 26, true) + v.getUint16(off + 28, true), data = u.subarray(start, start + size);
-      if (method === 0) return new TextDecoder().decode(data);
-      if (method === 8) return await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
-      throw new Error("壓縮檔的壓縮方式不支援，請先解壓縮再選裡面的 JSON");
-    }
+      if (method === 0) return data;
+      if (method === 8) return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+      throw new Error("壓縮檔的壓縮方式不支援");
+    }});
     p += 46 + nl + extra + cmt;
   }
-  throw new Error("壓縮檔裡找不到 _RFreq.json");
+  return list;
+}
+// 從 zip 裡找出 *_RFreq.json
+async function jsonFromZip(buf){
+  const f = zipList(buf).find(x => /_RFreq\.json$/.test(x.name));
+  if (!f) throw new Error("壓縮檔裡找不到 _RFreq.json");
+  return new TextDecoder().decode(await f.read());
 }
 // R0A → R0B；最後一碼不是 A～Y 就維持原樣讓 RD 自己改
 const nextRev = r => /^(.*?)([A-Y])$/.test(r || "") ? r.slice(0, -1) + String.fromCharCode(r.charCodeAt(r.length - 1) + 1) : (r || "");
@@ -1309,6 +1324,61 @@ $("f-open").onchange = async e => {
       : skipped.length ? ["以下內容沒有載入：", ...skipped] : null;
     renderNotice();
   } catch (err) { alert("無法開啟：" + err.message); }
+};
+
+/* ---------- 檢查需求表（MT 用）：用 zip 裡的 JSON 重新產生一份需求表，跟 zip 裡的 Excel 逐格比對 ---------- */
+// 讀 xlsx 每個工作表的儲存格：{工作表名: {A1: 值}}；Excel 另存過會改用 sharedStrings，一樣讀得到
+async function xlsxCells(bytes){
+  const files = Object.fromEntries(await Promise.all(zipList(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+    .map(async f => [f.name.replace(/^\//, ""), f])));
+  const xml = async n => files[n] ? new DOMParser().parseFromString(new TextDecoder().decode(await files[n].read()), "application/xml") : null;
+  const wb = await xml("xl/workbook.xml"), rels = await xml("xl/_rels/workbook.xml.rels"), ss = await xml("xl/sharedStrings.xml");
+  if (!wb || !rels) throw new Error("需求表不是有效的 Excel 檔");
+  const shared = ss ? [...ss.getElementsByTagName("si")].map(si => [...si.getElementsByTagName("t")].map(t => t.textContent).join("")) : [];
+  const target = Object.fromEntries([...rels.getElementsByTagName("Relationship")].map(r => [r.getAttribute("Id"), r.getAttribute("Target")]));
+  const out = {}, locked = {};
+  for (const sh of wb.getElementsByTagName("sheet")) {
+    const id = sh.getAttribute("r:id") || sh.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+    const t = target[id].replace(/^\/?xl\//, "").replace(/^\//, ""), doc = await xml("xl/" + t), cells = {};
+    for (const c of doc.getElementsByTagName("c")) {
+      const ty = c.getAttribute("t"), v = c.getElementsByTagName("v")[0]?.textContent;
+      const val = ty === "inlineStr" ? [...c.getElementsByTagName("t")].map(x => x.textContent).join("") : ty === "s" ? shared[+v] : v ?? "";
+      if (val !== "" && val != null) cells[c.getAttribute("r")] = String(val);
+    }
+    out[sh.getAttribute("name")] = cells; locked[sh.getAttribute("name")] = doc.getElementsByTagName("sheetProtection").length > 0;
+  }
+  return {sheets:out, locked};
+}
+const sameNum = (a, b) => a === b || (a !== "" && b !== "" && !isNaN(a) && !isNaN(b) && Math.abs(a - b) < 1e-9);
+$("b-check").onclick = () => $("f-check").click();
+$("f-check").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const list = zipList(await f.arrayBuffer());
+    const jf = list.find(x => /_RFreq\.json$/.test(x.name)), xf = list.find(x => /_需求表\.xlsx$/.test(x.name));
+    if (!jf) throw new Error("壓縮檔裡找不到 _RFreq.json");
+    if (!xf) throw new Error("壓縮檔裡找不到 _需求表.xlsx");
+    const o = JSON.parse(new TextDecoder().decode(await jf.read()));
+    if (!String(o.schema || "").startsWith("rf-requirement/")) throw new Error("這不是這個網頁下載的需求檔");
+    if (o.xlsx_format !== XLSX_FORMAT) throw new Error("這份檔案是舊版網頁產生的，需求表格式不同，沒辦法比對。請 RD 用目前的網頁重新下載");
+    const got = await xlsxCells(await xf.read()), want = await xlsxCells(buildXlsx(o));
+    const diffs = [];
+    const names = [...new Set([...Object.keys(want.sheets), ...Object.keys(got.sheets)])];
+    for (const n of names) {
+      if (!got.sheets[n]) { diffs.push(`少了「${n}」工作表`); continue; }
+      if (!want.sheets[n]) { diffs.push(`多了「${n}」工作表`); continue; }
+      const a = got.sheets[n], b = want.sheets[n];
+      for (const ref of [...new Set([...Object.keys(a), ...Object.keys(b)])])
+        if (!sameNum(a[ref] ?? "", b[ref] ?? "")) diffs.push(`「${n}」${ref}：需求表寫「${a[ref] ?? "（空白）"}」，網頁資料是「${b[ref] ?? "（空白）"}」`);
+    }
+    const unlocked = Object.keys(got.locked).filter(n => !got.locked[n]);
+    const who = `${o.project || "（未填 Project）"} ${o.revision || ""} · ${o.rd || "（未填填寫人）"}`;
+    if (!diffs.length) alert(`✓ 需求表沒有被改過\n${who}${unlocked.length ? `\n\n（但這些工作表的保護被解除過：${unlocked.join("、")}）` : ""}`);
+    else ui.notice = [`⚠ 需求表跟網頁產生的內容不一樣，可能被改過（${who}）。請 RD 回網頁「開啟舊檔」修改後重新下載：`,
+      ...diffs.slice(0, 15), ...(diffs.length > 15 ? [`…還有 ${diffs.length - 15} 處不一樣`] : []),
+      ...(unlocked.length ? [`這些工作表的保護被解除過：${unlocked.join("、")}`] : [])];
+    renderNotice();
+  } catch (err) { alert("無法檢查：" + err.message); }
 };
 
 state = templateState();   // 每次打開都先填好範本
