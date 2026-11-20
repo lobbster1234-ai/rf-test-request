@@ -28,6 +28,13 @@ header.top h1{font-size:17px;margin:0}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.primary:hover{filter:brightness(1.1);color:#fff}
+.btn:disabled,.btn:disabled:hover{opacity:.4;cursor:not-allowed;filter:none}
+.need{border-color:var(--err) !important;box-shadow:0 0 0 2px rgba(220,60,60,.15)}
+.req-hint{color:var(--err);font-weight:600;font-size:13px;margin:0 0 8px}
+.btn.big{font-size:15px;font-weight:600;padding:10px 22px}
+.xl-only{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-color:var(--accent)}
+.chg{font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--accent);border-radius:6px;width:100%;box-sizing:border-box}
+.meta input[readonly]{background:var(--bg,#f4f6fa);color:var(--muted)}
 .btn.ghost{border-color:transparent;background:none;color:var(--muted)}
 header.top .btn{border-color:#c3c9d8;font-weight:600;padding:6px 16px}   /* 上方三顆按鈕：框線深一點、字粗一點，比較好找 */
 .link{border:none;background:none;color:var(--accent);cursor:pointer;font-size:13px;padding:0}
@@ -171,14 +178,14 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px}
   <div class="meta">
     <label>Project<input id="m-project" placeholder="專案編號"></label>
     <label>RD 填寫人<input id="m-rd"></label>
-    <label>日期<input id="m-date" type="date"></label>
+    <label>日期<input id="m-date" type="date" readonly title="自動填今天，不能改"></label>
     <label>Revision<input id="m-rev" style="width:64px"></label>
   </div>
   <div class="spacer"></div>
-  <button class="btn" id="b-open" title="選之前下載的 zip 或 JSON，載入後改版">開啟舊檔</button>
-  <input type="file" id="f-open" accept=".zip,.json" hidden>
-  <button class="btn" id="b-check" title="MT 用：選 RD 給的 zip，檢查裡面的需求表 Excel 有沒有被改過">檢查需求表</button>
-  <input type="file" id="f-check" accept=".zip" hidden>
+  <button class="btn" id="b-open" title="選之前下載的 zip、JSON 或需求表 Excel，載入後改版">開啟舊檔</button>
+  <input type="file" id="f-open" accept=".zip,.json,.xlsx" hidden>
+  <button class="btn" id="b-check" title="MT 用：選 RD 給的 zip 或需求表 Excel，檢查需求表有沒有被改過">檢查需求表</button>
+  <input type="file" id="f-check" accept=".zip,.xlsx" hidden>
   <button class="btn" id="b-tpl" title="重新填回 NEW 範本">套用範本</button>
   <button class="btn" id="b-clear">清空</button>
 </header>
@@ -203,6 +210,8 @@ const MODES = {
   "EHT":{rates:mcs(13)}
 };
 function mcs(n){return Array.from({length:n+1},(_,i)=>"MCS"+i)}
+// 各 Mode 最高 Rate 的 EVM 標準（IEEE）：EHT 4096-QAM -38、HE 1024-QAM -35、VHT 256-QAM -32
+const EVM_AUTO = {"EHT MCS13":"-38", "HE MCS11":"-35", "VHT MCS9":"-32"};
 // 各頻段：頻道（依頻寬）、頻率公式、可用 Mode 與各 Mode 支援的頻寬
 // 2.4G 頻道 14（2484，只有 11b 能用）範本沒有，先不列
 const BANDS = {
@@ -239,7 +248,7 @@ const num = v => (v === "" || v == null) ? null : Number(v);
 const SECTIONS = [
   { key:"cal", title:"Calibrate Power", desc:"發射功率校正", group:"band", stage:"Calibration", path:"Tx",
     fields:[
-      {k:"target", label:"Target Power", unit:"dBm", req:true},
+      {k:"target", label:"Target Power", unit:"dBm", req:true, step:0.5},
       {k:"lo", label:"誤差下限", unit:"dB", req:true, rangeTo:"hi", rlabel:"誤差"},
       {k:"hi", label:"誤差上限", unit:"dB", req:true, rangeOf:true}],
     pairs:[["lo","hi"]],
@@ -249,7 +258,7 @@ const SECTIONS = [
 
   { key:"bf", title:"Tx Im BF Calibration", titles:{"2.4G":"TX BF Calibration & Verification"}, noBands:["6G"], desc:"Beamforming 校正", group:"band", stage:"Calibration", path:"Beamforming",
     fields:[
-      {k:"target", label:"Target Power", unit:"dBm", req:true},
+      {k:"target", label:"Target Power", unit:"dBm", req:true, step:0.5},
       {k:"rxp", label:"DUT Rx Power", unit:"dBm", req:true},
       {k:"lo", label:"Pass 下限", unit:"dBm", req:true},
       {k:"hi", label:"Pass 上限", unit:"dBm", req:true}],
@@ -269,10 +278,10 @@ const SECTIONS = [
   { key:"tx", title:"Tx Verification", desc:"Power / EVM / Freq Accuracy / Spectrum Mask", group:"band", stage:"Verification", path:"Tx",
     specHint:"規格留空＝該項不測",
     fields:[
-      {k:"target", label:"Target Power", unit:"dBm", req:true},
+      {k:"target", label:"Target Power", unit:"dBm", req:true, step:0.5},
       {k:"pwlo", label:"Power 誤差下限", unit:"dB", rangeTo:"pwhi", rlabel:"Power 誤差"},
       {k:"pwhi", label:"Power 誤差上限", unit:"dB", rangeOf:true},
-      {k:"evm", label:"EVM", unit:"dB", fixLo:-80},
+      {k:"evm", label:"EVM", unit:"dB", fixLo:-80, choices:["-38","-35","-32"]},
       {k:"felo", label:"Freq Acc 下限", unit:"ppm"},
       {k:"fehi", label:"Freq Acc 上限", unit:"ppm"},
       {k:"mask", label:"Spectrum Mask", unit:"%", range:[0,100], fixLo:0},
@@ -344,7 +353,7 @@ function blankSec(pid, o={}){
   const bw = {};
   BWS.forEach(b => bw[b] = {chs:o.chs?.[b] ?? [], ov:o.ov?.[b] ?? {}});
   return {band:bandOf(pid), mode:o.mode ?? "EHT", rate:o.rate ?? (s.auto ? "auto" : "MCS13"),
-          chains:[true,true,true,true], dirs:o.dirs ?? {TX:true,RX:true}, v, bw,   // Chain 固定全測
+          chains:s.key === "bf" || !o.chains ? [true,true,true,true] : o.chains, dirs:o.dirs ?? {TX:true,RX:true}, v, bw,   // Chain 預設全勾；TX BF 固定全測
           on:Object.fromEntries((s.toggles || []).map(g => [g.k, g.keys.some(k => v[k] !== "" || BWS.some(b => (bw[b].ov[k] ?? "") !== ""))]))};
 }
 // 用本地時間，不用 toISOString（那是 UTC，台灣早上 8 點前會變成前一天）
@@ -353,7 +362,7 @@ function today(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 function blankState(){
-  return {meta:{project:"",rd:"",date:today(),rev:"R0A"},
+  return {meta:{project:"",rd:"",date:today(),rev:"R0A",history:[],change:"",fromOld:false},
           sec:Object.fromEntries(BASE_PAGES.map(p=>[p,blankSec(p)]))};
 }
 // NEW 範本：第一次打開、或按「套用範本」時填入；Project／姓名不帶
@@ -389,7 +398,7 @@ function templateState(){
 let state = blankState();
 let band = "5G";                 // 左側目前看的頻段
 let cur = pidOf(band, "cal");    // 目前顯示的頁：頁 id 或 "overview"
-const ui = {pick:{}, ov:{}, dismiss:{}, fold:{}, notice:null, backup:{}};   // backup：側欄一鍵清空前的內容，可再點恢復   // 介面展開／關閉狀態，不存檔
+const ui = {pick:{}, ov:{}, dismiss:{}, fold:{}, notice:null, backup:{}, other:{}};   // other：EVM 選了「其他」   // backup：側欄一鍵清空前的內容，可再點恢復   // 介面展開／關閉狀態，不存檔
 
 /* ---------- 計算 ---------- */
 const rateList = (pid, mode) => (secOf(pid).auto ? ["auto"] : []).concat(MODES[mode].rates);
@@ -427,6 +436,7 @@ function validate(pid){
   if (untouched(pid)) return {errs, marks};
   const bad = (m, ...ks) => { errs.push(m); ks.forEach(k=>marks.add(k)); };
   if (s.dir && !d.dirs.TX && !d.dirs.RX) bad("至少要勾一個方向", "dirs");
+  if (!d.chains.some(Boolean)) bad("至少要勾一個 Chain", "chains");
   const bws = usedBws(d);
   if (!bws.length) { bad("還沒選任何頻道", "chs"); return {errs, marks}; }
   for (const f of s.fields) if (f.req && d.v[f.k] === "" && bws.some(b => !isOv(d,b,f.k))) bad(`${f.label} 必填`, "v:"+f.k);
@@ -496,15 +506,25 @@ function renderSide(){
 function fieldHtml(f, get, kOf, phOf, d){
   if (f.rangeOf) return "";   // 上限跟下限畫在同一格
   const mag = x => (x === "" || x == null) ? "" : String(Math.abs(Number(x)));
-  const inp = (k, neg) => { const ph = mag(phOf(k)); return `<input type="number" step="any" min="0" data-k="${kOf(k)}"${neg?" data-neg":""} value="${esc(mag(get(k)))}"${ph?` placeholder="${esc(ph)}"`:""}>`; };
+  const inp = (k, neg) => { const ph = mag(phOf(k)); return `<input type="number" step="0.5" min="0" data-k="${kOf(k)}"${neg?" data-neg":""} value="${esc(mag(get(k)))}"${ph?` placeholder="${esc(ph)}"`:""}>`; };
   if (f.rangeTo) return `<label class="fld">${f.rlabel}<span class="in"><b class="sg">−</b>${inp(f.k, true)}～<b class="sg">+</b>${inp(f.rangeTo)}<span class="u">${f.unit}</span></span></label>`;
   const val = get(f.k), dataK = kOf(f.k), placeholder = phOf(f.k);
   const off = f.tog && d && !d.on?.[f.tog];
+  // EVM：下拉選固定值（-38／-35／-32），不在選項裡的選「其他」自己填
+  if (f.choices) {
+    const other = (val !== "" && val != null && !f.choices.includes(String(val))) || ui.other[`${cur}|${dataK}`];
+    const first = placeholder == null ? "（不測）" : `同上${placeholder ? `（${placeholder}）` : ""}`;
+    const sel = other ? "other" : String(val ?? "");
+    const o = (v, t) => `<option value="${v}"${sel === v ? " selected" : ""}>${t}</option>`;
+    return `<label class="fld">${f.label}<span class="in"><b class="fx">${f.fixLo}</b>～<select data-sel="${dataK}">${o("", first)}${f.choices.map(c => o(c, c)).join("")}${o("other", "其他（自填）")}</select>`
+      + (other ? `<input type="number" step="any" data-k="${dataK}" value="${esc(val)}" placeholder="自填" style="width:70px">` : "")
+      + `<span class="u">${f.unit}</span></span></label>`;
+  }
   // 固定下限（EVM -80、Mask 0）：顯示給大家看，不能改
   if (f.fixLo != null) return `<label class="fld">${f.label}<span class="in"><b class="fx">${f.fixLo}</b>～<input type="number" step="any" data-k="${dataK}" value="${esc(val)}"${placeholder?` placeholder="${esc(placeholder)}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}><span class="u">${f.unit}</span></span></label>`;
   const ctl = f.type==="yn"
     ? `<select data-k="${dataK}">${placeholder!=null?`<option value="">同上</option>`:""}${opts(["Y","N"],val)}</select>`
-    : `<input type="number" step="any" data-k="${dataK}" value="${esc(val)}"${placeholder?` placeholder="${esc(placeholder)}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}${off?" disabled":""}>`;
+    : `<input type="number" step="${f.step||"any"}" data-k="${dataK}" value="${esc(val)}"${placeholder?` placeholder="${esc(placeholder)}"`:""}${f.range?` min="${f.range[0]}" max="${f.range[1]}"`:""}${off?" disabled":""}>`;
   return `<label class="fld${off?" off":""}">${f.label}<span class="in">${ctl}${f.unit?`<span class="u">${f.unit}</span>`:""}</span></label>`;
 }
 
@@ -526,7 +546,7 @@ function renderMain(){
         ${s.dir?`<label class="fld">方向<span class="checks" data-k="dirs">${["TX","RX"].map(x=>`<label><input type="checkbox" data-dir="${x}"${d.dirs[x]?" checked":""}>${x}</label>`).join("")}</span></label>`:""}
         <label class="fld">802.11 Mode<span class="in"><select data-k="mode">${opts(Object.keys(BANDS[d.band].modes),d.mode)}</select></span></label>
         <label class="fld">Rate<span class="in"><select data-k="rate">${opts(rateList(pid,d.mode),d.rate)}</select></span></label>
-        <label class="fld">Chain<span class="checks" data-k="chains">${d.chains.map((c,j)=>`<label><input type="checkbox" data-chain="${j}" checked disabled>${j}</label>`).join("")}</span></label>
+        <label class="fld">Chain<span class="checks" data-k="chains">${d.chains.map((c,j)=>`<label><input type="checkbox" data-chain="${j}"${c?" checked":""}${s.key==="bf"?" disabled":""}>${j}</label>`).join("")}</span></label>
       </div>
       <div class="grp-tools">${pid !== baseOf(pid) ? `<button class="link danger" data-delgroup>刪除這一組</button>` : ""}<button class="link" data-addgroup title="同一個測項要用不同的 Mode／Rate／Chain 時，新增一組">＋ 新增一組條件（不同 Mode／Rate）</button></div></div>
 
@@ -575,6 +595,27 @@ function paintMain(){
   const dv = $("main").querySelector("[data-derived]"); if (dv) dv.textContent = secOf(cur).derived(state.sec[cur].v);
 }
 
+// Cover 的版本表：之前各版＋這一版（第一次產生寫 First list，改版寫 RD 填的修改內容）
+const curChange = () => state.meta.fromOld ? String(state.meta.change || "").trim() : "First list";
+const changeRows = () => [...(state.meta.history || []), {rev:state.meta.rev, date:state.meta.date, change:curChange(), rd:state.meta.rd}];
+// 必填沒填的欄位名稱（沒填就不能下載）
+function metaErrs(){
+  const m = state.meta, e = [];
+  if (!String(m.project || "").trim()) e.push("Project");
+  if (!String(m.rd || "").trim()) e.push("RD 填寫人");
+  if (m.fromOld && !curChange()) e.push("本次修改內容（Change List）");
+  return e;
+}
+// 依必填狀態：空白欄位加紅框、下載按鈕反白、按鈕上方寫缺什麼（打字時就更新，不重畫整頁）
+function paintReq(){
+  const me = metaErrs();
+  $("m-project").classList.toggle("need", me.includes("Project"));
+  $("m-rd").classList.toggle("need", me.includes("RD 填寫人"));
+  $("m-change")?.classList.toggle("need", me.includes("本次修改內容（Change List）"));
+  $("main").querySelectorAll("[data-xlsx],[data-exp]").forEach(b => b.disabled = !!me.length);
+  const h = $("req-hint");
+  if (h) { h.hidden = !me.length; h.textContent = `請先填 ${me.join("、")} 才能下載`; }
+}
 function specSummary(s, v){
   return s.fields.filter(f=>v[f.k]!=="" && f.type!=="yn").map(f=>`${f.label} ${esc(v[f.k])}${f.unit?" "+f.unit:""}`).join("、");
 }
@@ -601,9 +642,21 @@ function renderOverview(){
   const o = buildOutput();
   $("main").innerHTML = `
     <div class="page-h"><h2>總覽／匯出</h2><p>${esc(state.meta.project||"（未填 Project）")} · ${BAND_KEYS.join("/")} · ${esc(state.meta.rev)} · ${esc(state.meta.rd||"（未填填寫人）")}</p></div>
+    <div class="step"><div class="step-t"><h3>版本紀錄（需求表 Cover）</h3></div>
+      <div class="tbl-wrap"><table><thead><tr><th class="nw">Rev</th><th class="nw">Date</th><th>Change List</th><th class="nw">Issue by</th></tr></thead><tbody>
+        ${(state.meta.history || []).map(h=>`<tr><td class="nw">${esc(h.rev)}</td><td class="nw">${esc(h.date)}</td><td>${esc(h.change)}</td><td class="nw">${esc(h.rd)}</td></tr>`).join("")}
+        <tr><td class="nw"><b>${esc(state.meta.rev)}</b></td><td class="nw">${esc(state.meta.date)}</td>
+          <td>${state.meta.fromOld ? `<input id="m-change" class="chg" placeholder="本次修改內容（必填）" value="${esc(state.meta.change || "")}">` : "First list"}</td>
+          <td class="nw">${esc(state.meta.rd || "")}</td></tr>
+      </tbody></table></div></div>
     ${errs.length?`<div class="step" style="border-color:#f1c2c2"><div class="step-t"><h3 style="color:var(--err)">還有 ${errs.length} 個問題</h3></div><ul class="errlist">${errs.map(e=>`<li>${e}</li>`).join("")}</ul></div>`:""}
     <div class="step"><div class="tbl-wrap"><table>
       <thead><tr><th>測項</th><th class="nw">條件</th><th>規格</th><th class="nw">頻道</th><th class="nw">點數</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="req-hint" id="req-hint" hidden></div>
+    <div class="step xl-only">
+      <div><h3 style="margin:0 0 2px;font-size:15px">MT 需求表</h3><div class="sm" style="color:var(--muted)">只下載需求表 Excel（<b class="mono">${esc(packName())}_需求表.xlsx</b>），MT 可以直接拿這個檔案到「檢查需求表」比對</div></div>
+      <button class="btn primary big" data-xlsx>生成 MT 需求表 Excel</button>
+    </div>
     <div class="step">
       <div class="sm" style="color:var(--muted)">下載的壓縮檔解開是資料夾 <b class="mono">${esc(packName())}</b>，裡面有 JSON、該儀器的測項檔和 LIMIT 檔和需求表 Excel（Cover／2.4G／5G／6G／Throughput 工作表）</div>
       <div class="exp">${EXPORTERS.map(x=>`<div class="exp-card">
@@ -611,20 +664,35 @@ function renderOverview(){
         <button class="btn primary" data-exp="${x.key}">下載（${x.show ?? x.file}＋JSON）</button></div>`).join("")}</div>
       <details style="margin-top:14px"><summary>逐點明細</summary><div class="tbl-wrap" style="margin-top:8px">${detailTables()}</div></details>
     </div>`;
-  const okToGo = () => !errs.length || confirm(`還有 ${errs.length} 個問題，仍要下載？`);
+  const okToGo = () => {
+    const me = metaErrs();   // 保險：按鈕已反白，萬一還是按到也擋下
+    if (me.length) { alert(`請先填 ${me.join("、")} 才能下載`); return false; }
+    return !errs.length || confirm(`還有 ${errs.length} 個問題，仍要下載？`);
+  };
+  const chg = $("m-change");
+  if (chg) chg.oninput = () => { state.meta.change = chg.value; paintReq(); };
+  // 下載時重新產生資料（Change List 打字不會重畫頁面，要拿最新的）
+  $("main").querySelector("[data-xlsx]").onclick = () => {
+    if (!o.rows.length) return alert("還沒有選任何頻道，沒有東西可以下載");
+    if (!okToGo()) return;
+    const o2 = buildOutput();
+    download(`${packName()}_需求表.xlsx`, buildXlsx(o2), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  };
   // 一個 zip，解開是「Project_Revision_姓名」資料夾，裡面放 JSON＋該儀器的測項檔（檔名照儀器規定不改）＋需求表
   $("main").querySelectorAll("[data-exp]").forEach(b => b.onclick = () => {
     if (!o.rows.length) return alert("還沒有選任何頻道，沒有東西可以下載");
     if (!okToGo()) return;
-    const x = EXPORTERS.find(e => e.key === b.dataset.exp), name = packName(), r = x.conv(o);
+    const o2 = buildOutput();
+    const x = EXPORTERS.find(e => e.key === b.dataset.exp), name = packName(), r = x.conv(o2);
     const zip = makeZip([
       {name:`${name}/`, data:""},
-      {name:`${name}/${name}_RFreq.json`, data:JSON.stringify(o,null,2)},
+      {name:`${name}/${name}_RFreq.json`, data:JSON.stringify(o2,null,2)},
       {name:`${name}/${x.file}`, data:r.text},
       ...(r.extra || []).map(f => ({name:`${name}/${f.file}`, data:f.data})),
-      {name:`${name}/${name}_需求表.xlsx`, data:buildXlsx(o)}]);
+      {name:`${name}/${name}_需求表.xlsx`, data:buildXlsx(o2)}]);
     download(`${name}.zip`, zip, "application/zip");
   });
+  paintReq();
 }
 // 資料夾名：Project_Revision_姓名；空白用「未填」，去掉檔名不能用的字元
 function packName(){
@@ -712,6 +780,13 @@ function xlSheet(){
 // RD 要改需求一律回網頁「開啟舊檔」改版；MT 只看不改
 const b64 = u => btoa(String.fromCharCode(...u));
 const randB64 = n => b64(crypto.getRandomValues(new Uint8Array(n)));
+// 需求表裡藏的 JSON：UTF-8 轉 base64（分段轉，檔案大也不會爆）
+const RFREQ_NS = "urn:rf-test-request:rfreq";
+function utf8B64(text){
+  const u = new TextEncoder().encode(text); let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
 // 鎖住：不能改、不能選取（所以也複製不了）、不能插刪列欄
 const XL_PROTECT = () => `<sheetProtection algorithmName="SHA-512" hashValue="${randB64(64)}" saltValue="${randB64(16)}" spinCount="100000" sheet="1" objects="1" scenarios="1" selectLockedCells="1" selectUnlockedCells="1"/>`;
 // zoom：打開時的縮放比例，照範本（Cover 80%、頻段頁 55%、Throughput 67%）
@@ -794,7 +869,8 @@ function buildXlsx(o){
   cv.set(2, 1, "Project:", 9); cv.set(2, 2, o.project || "", 5); cv.set(2, 3, "", 5); cv.merge(2, 2, 2, 3);
   cv.set(3, 1, "Band:", 9); cv.set(3, 2, o.bands.join(" / "), 5); cv.set(3, 3, "", 5); cv.merge(3, 2, 3, 3);
   ["Rev","Date","Change List","Issue by"].forEach((t, j) => cv.set(5, 1 + j, t, 10));
-  [o.revision, o.date, "", o.rd].forEach((v, j) => cv.set(6, 1 + j, v || "", 5));
+  const cl = Array.isArray(o.change_list) ? o.change_list : [{rev:o.revision, date:o.date, change:"", rd:o.rd}];
+  cl.forEach((h, i) => [h.rev, h.date, h.change, h.rd].forEach((v, j) => cv.set(6 + i, 1 + j, v || "", 5)));
   sheets.push(["Cover", sheetXml(cv, [3, 18, 18, 60, 18], 80)]);
   const w = [3, 30, 14, 10, 13, 18, 9, 9, 9, 9, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15];
   for (const b of BAND_KEYS) {
@@ -807,15 +883,20 @@ function buildXlsx(o){
   const NS = "http://schemas.openxmlformats.org", REL = `${NS}/officeDocument/2006/relationships`;
   const files = [
     {name:"[Content_Types].xml", data:X + `<Types xmlns="${NS}/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>`
-      + sheets.map((_,i) => `<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("") + `</Types>`},
+      + sheets.map((_,i) => `<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")
+      + `<Override PartName="/customXml/itemProps1.xml" ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml"/></Types>`},
     {name:"_rels/.rels", data:X + `<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
     {name:"xl/workbook.xml", data:X + `<workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${REL}"><workbookProtection workbookAlgorithmName="SHA-512" workbookHashValue="${randB64(64)}" workbookSaltValue="${randB64(16)}" workbookSpinCount="100000" lockStructure="1"/><sheets>`
       + sheets.map(([n],i) => `<sheet name="${xmlEsc(n)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join("") + `</sheets></workbook>`},
     {name:"xl/_rels/workbook.xml.rels", data:X + `<Relationships xmlns="${NS}/package/2006/relationships">`
       + sheets.map((_,i) => `<Relationship Id="rId${i+1}" Type="${REL}/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join("")
-      + `<Relationship Id="rId${sheets.length+1}" Type="${REL}/styles" Target="styles.xml"/></Relationships>`},
+      + `<Relationship Id="rId${sheets.length+1}" Type="${REL}/styles" Target="styles.xml"/><Relationship Id="rId${sheets.length+2}" Type="${REL}/customXml" Target="../customXml/item1.xml"/></Relationships>`},
     {name:"xl/styles.xml", data:XL_STYLES},
-    ...sheets.map(([,xml], i) => ({name:`xl/worksheets/sheet${i+1}.xml`, data:xml}))
+    ...sheets.map(([,xml], i) => ({name:`xl/worksheets/sheet${i+1}.xml`, data:xml})),
+    // 檢查／開啟舊檔用：JSON 以 base64 藏在 Custom XML，工作表上看不到
+    {name:"customXml/item1.xml", data:X + `<rfreq xmlns="${RFREQ_NS}">${utf8B64(JSON.stringify(o))}</rfreq>`},
+    {name:"customXml/itemProps1.xml", data:X + `<ds:datastoreItem ds:itemID="{${crypto.randomUUID().toUpperCase()}}" xmlns:ds="${NS}/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="${RFREQ_NS}"/></ds:schemaRefs></ds:datastoreItem>`},
+    {name:"customXml/_rels/item1.xml.rels", data:X + `<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/customXmlProps" Target="itemProps1.xml"/></Relationships>`}
   ];
   return zipBytes(makeZip(files));
 }
@@ -851,8 +932,9 @@ function buildOutput(){
       });
     });
   }
+  state.meta.date = today();   // 日期一律是產生當天
   return {schema:"rf-requirement/0.3", xlsx_format:XLSX_FORMAT, project:state.meta.project, revision:state.meta.rev,
-          rd:state.meta.rd, date:state.meta.date,
+          rd:state.meta.rd, date:state.meta.date, change_list:changeRows(),
           bands:BAND_KEYS.filter(b=>out.some(r=>r.band===b)), rows:out,
           draft:{meta:state.meta, sec:state.sec}};   // 表單原始狀態：開啟舊檔時原樣還原（共同規格／例外分得清楚）
 }
@@ -1103,14 +1185,25 @@ document.addEventListener("change", e => {
     return update(true);
   }
   if (t.dataset.dir) { d.dirs[t.dataset.dir] = t.checked; return update(false); }
+  if (t.dataset.chain != null) { d.chains[+t.dataset.chain] = t.checked; return update(false); }
   if (t.dataset.tog) {
     d.on[t.dataset.tog] = t.checked;
     if (!t.checked) for (const k of secOf(cur).toggles.find(g => g.k === t.dataset.tog).keys) { d.v[k] = ""; BWS.forEach(b => delete d.bw[b].ov[k]); }
     return update(true);
   }
+  if (t.dataset.sel) {   // EVM 下拉：選「其他」才出現自填框
+    const isOther = t.value === "other";
+    ui.other[`${cur}|${t.dataset.sel}`] = isOther;
+    setByKey(d, t.dataset.sel, isOther ? "" : t.value);
+    return update(true);
+  }
   if (!t.dataset.k) return;
   setByKey(d, t.dataset.k, t.value);
   if (t.dataset.k==="mode" && !rateList(cur,d.mode).includes(d.rate)) d.rate = rateList(cur,d.mode)[0];
+  // Tx Verification：選到各 Mode 最高 Rate 時，EVM 自動帶 IEEE 標準
+  if ((t.dataset.k==="mode" || t.dataset.k==="rate") && secOf(cur).key === "tx" && EVM_AUTO[`${d.mode} ${d.rate}`]) {
+    d.v.evm = EVM_AUTO[`${d.mode} ${d.rate}`]; ui.other[`${cur}|v:evm`] = false;
+  }
   update(t.dataset.k==="mode" || t.dataset.k==="rate");
 });
 document.addEventListener("click", e => {
@@ -1162,17 +1255,24 @@ document.addEventListener("click", e => {
 
 $("b-tpl").onclick = () => {
   if (!confirm("範本將覆蓋目前填的測項（Project、姓名不變），確定嗎？")) return;
-  state = {meta:state.meta, sec:templateState().sec}; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {}; ui.backup = {};
+  state = {meta:state.meta, sec:templateState().sec}; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {}; ui.backup = {}; ui.other = {};
   if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true);
 };
-$("b-clear").onclick = () => { if (confirm("會清空所有內容，確定嗎？")) { state = blankState(); refreshPages(); ui.backup = {}; if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
-["project","rd","date","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
+$("b-clear").onclick = () => { if (confirm("會清空所有內容，確定嗎？")) { state = blankState(); refreshPages(); ui.backup = {}; ui.other = {}; if (cur !== "overview") cur = baseOf(cur); ui.notice = null; renderNotice(); syncMeta(); update(true); } };
+["project","rd","rev"].forEach(k => $("m-"+k).addEventListener("input", e => {
   state.meta[k] = e.target.value;
   if (cur === "overview") renderOverview();   // 總覽頁標題跟著更新
+  paintReq();   // 其他頁也要更新紅框
 }));
-function syncMeta(){ ["project","rd","date","rev"].forEach(k => $("m-"+k).value = state.meta[k] ?? ""); }
+function syncMeta(){
+  ["project","rd","date","rev"].forEach(k => $("m-"+k).value = state.meta[k] ?? "");
+  // 開啟舊檔改版：Project 鎖住不能改（RD 可以換人）
+  $("m-project").readOnly = !!state.meta.fromOld;
+  $("m-project").title = state.meta.fromOld ? "開啟舊檔改版，Project 不能改" : "";
+  paintReq();
+}
 
-/* ---------- 開啟舊檔：選之前下載的 zip 或 JSON，把表單原樣填回來改版 ---------- */
+/* ---------- 開啟舊檔：選之前下載的 zip、JSON 或需求表 Excel，把表單原樣填回來改版 ---------- */
 // 讀 zip：回傳 [{name, read()}]，read() 取出內容（自己產的 zip 沒壓縮；被 Windows 重新壓過的用瀏覽器內建的解壓）
 function zipList(buf){
   const u = new Uint8Array(buf), v = new DataView(buf), list = [];
@@ -1194,9 +1294,23 @@ function zipList(buf){
   }
   return list;
 }
-// 從 zip 裡找出 *_RFreq.json
+// 檔案是不是需求表 Excel（xlsx 本身也是 zip，裡面有 xl/workbook.xml）
+const isXlsx = list => list.some(x => x.name.replace(/^\//, "") === "xl/workbook.xml");
+// 從需求表 Excel 取出藏的 JSON；Excel 另存後檔名可能變（item2.xml…），所以每個 customXml 都找；沒有就回 null
+async function jsonFromXlsx(list){
+  for (const f of list.filter(x => /^\/?customXml\/item\d+\.xml$/i.test(x.name))) {
+    const el = new DOMParser().parseFromString(new TextDecoder().decode(await f.read()), "application/xml").documentElement;
+    if (el?.namespaceURI === RFREQ_NS && el.localName === "rfreq")
+      return new TextDecoder().decode(Uint8Array.from(atob(el.textContent.replace(/\s+/g, "")), c => c.charCodeAt(0)));
+  }
+  return null;
+}
+const NO_EMBED = "這份需求表 Excel 裡沒有網頁資料（11/20 以前的網頁產生的），請改用當時下載的 zip，或請 RD 用目前的網頁重新產生";
+// 從 zip 裡找出 *_RFreq.json；選的是需求表 Excel 就取裡面藏的 JSON
 async function jsonFromZip(buf){
-  const f = zipList(buf).find(x => /_RFreq\.json$/.test(x.name));
+  const list = zipList(buf);
+  if (isXlsx(list)) { const t = await jsonFromXlsx(list); if (t == null) throw new Error(NO_EMBED); return t; }
+  const f = list.find(x => /_RFreq\.json$/.test(x.name));
   if (!f) throw new Error("壓縮檔裡找不到 _RFreq.json");
   return new TextDecoder().decode(await f.read());
 }
@@ -1238,7 +1352,13 @@ function restoreDraft(dr){
     st.sec[pid] = d;
   }
   const m = dr.meta || {};
-  st.meta = {project:String(m.project ?? ""), rd:String(m.rd ?? ""), rev:nextRev(String(m.rev ?? "")), date:today()};
+  // 11/20 以後的檔案有歷史紀錄：把上一版接到歷史後面；更早的檔案沒有紀錄，從這一版開始累積
+  const str = x => String(x ?? "");
+  const history = Array.isArray(m.history)
+    ? [...m.history.map(h => ({rev:str(h?.rev), date:str(h?.date), change:str(h?.change), rd:str(h?.rd)})),
+       {rev:str(m.rev), date:str(m.date), change:m.fromOld ? str(m.change).trim() : "First list", rd:str(m.rd)}]
+    : [];
+  st.meta = {project:str(m.project), rd:str(m.rd), rev:nextRev(str(m.rev)), date:today(), history, change:"", fromOld:true};
   return {st, oldRev:String(m.rev ?? "")};
 }
 // 舊版檔案（沒有存表單原始狀態）：從測試點清單倒推回表單，猜不準的地方回傳提醒
@@ -1296,7 +1416,7 @@ function legacyDraft(o){
     if (bws.length > 1 && bws.some(b => Object.keys(bw[b].ov).length))
       notes.push(`${name}：舊檔沒記錄哪些是共同規格、哪些是例外，已用 ${base}MHz 的值當共同規格，其他頻寬不一樣的地方設成「此頻寬規格不同」，請確認`);
     const dirs = key === "tp" ? {TX:rows.some(r => r.direction === "TX"), RX:rows.some(r => r.direction === "RX")} : undefined;
-    sec[pid] = {mode:first.mode, rate:first.rate, chains:[true,true,true,true], dirs, v, bw};
+    sec[pid] = {mode:first.mode, rate:first.rate, chains:key === "bf" || !chains.some(Boolean) ? [true,true,true,true] : chains, dirs, v, bw};
   }
   return {draft:{meta:{project:o.project, rd:o.rd, rev:o.revision, date:o.date}, sec}, notes:[...new Set(notes)]};
 }
@@ -1313,7 +1433,7 @@ $("f-open").onchange = async e => {
     const busy = state.meta.project || PAGES.some(p => !untouched(p));
     if (busy && !confirm("畫面上已經有填寫的內容，開啟舊檔會覆蓋掉，確定嗎？")) return;
     const {st, oldRev} = restoreDraft(legacyOne ? legacyOne.draft : o.draft);
-    state = st; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {}; ui.backup = {};
+    state = st; refreshPages(); ui.pick = {}; ui.ov = {}; ui.dismiss = {}; ui.fold = {}; ui.backup = {}; ui.other = {};
     band = BAND_KEYS.find(b => pagesIn(b).some(p => !untouched(p))) || BAND_KEYS[0];
     cur = "overview"; syncMeta(); update(true);
     // 舊版檔案有猜不準的地方、或檔案裡有網頁還沒支援的頻段（例如 6G），才出通知
@@ -1326,7 +1446,7 @@ $("f-open").onchange = async e => {
   } catch (err) { alert("無法開啟：" + err.message); }
 };
 
-/* ---------- 檢查需求表（MT 用）：用 zip 裡的 JSON 重新產生一份需求表，跟 zip 裡的 Excel 逐格比對 ---------- */
+/* ---------- 檢查需求表（MT 用）：用 JSON（zip 裡的、或 Excel 裡藏的）重新產生一份需求表，跟 Excel 逐格比對 ---------- */
 // 讀 xlsx 每個工作表的儲存格：{工作表名: {A1: 值}}；Excel 另存過會改用 sharedStrings，一樣讀得到
 async function xlsxCells(bytes){
   const files = Object.fromEntries(await Promise.all(zipList(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
@@ -1354,14 +1474,21 @@ $("b-check").onclick = () => $("f-check").click();
 $("f-check").onchange = async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   try {
-    const list = zipList(await f.arrayBuffer());
-    const jf = list.find(x => /_RFreq\.json$/.test(x.name)), xf = list.find(x => /_需求表\.xlsx$/.test(x.name));
-    if (!jf) throw new Error("壓縮檔裡找不到 _RFreq.json");
-    if (!xf) throw new Error("壓縮檔裡找不到 _需求表.xlsx");
-    const o = JSON.parse(new TextDecoder().decode(await jf.read()));
+    const buf = await f.arrayBuffer(), list = zipList(buf);
+    let o, xlBytes;
+    if (isXlsx(list)) {   // 單獨的需求表 Excel：用裡面藏的 JSON 比對
+      const t = await jsonFromXlsx(list);
+      if (t == null) throw new Error(NO_EMBED);
+      o = JSON.parse(t); xlBytes = new Uint8Array(buf);
+    } else {              // 一整包 zip：用 zip 裡的 JSON 比對 zip 裡的 Excel
+      const jf = list.find(x => /_RFreq\.json$/.test(x.name)), xf = list.find(x => /_需求表\.xlsx$/.test(x.name));
+      if (!jf) throw new Error("壓縮檔裡找不到 _RFreq.json");
+      if (!xf) throw new Error("壓縮檔裡找不到 _需求表.xlsx");
+      o = JSON.parse(new TextDecoder().decode(await jf.read())); xlBytes = await xf.read();
+    }
     if (!String(o.schema || "").startsWith("rf-requirement/")) throw new Error("這不是這個網頁下載的需求檔");
     if (o.xlsx_format !== XLSX_FORMAT) throw new Error("這份檔案是舊版網頁產生的，需求表格式不同，沒辦法比對。請 RD 用目前的網頁重新下載");
-    const got = await xlsxCells(await xf.read()), want = await xlsxCells(buildXlsx(o));
+    const got = await xlsxCells(xlBytes), want = await xlsxCells(buildXlsx(o));
     const diffs = [];
     const names = [...new Set([...Object.keys(want.sheets), ...Object.keys(got.sheets)])];
     for (const n of names) {
