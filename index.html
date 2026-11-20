@@ -595,8 +595,8 @@ function paintMain(){
   const dv = $("main").querySelector("[data-derived]"); if (dv) dv.textContent = secOf(cur).derived(state.sec[cur].v);
 }
 
-// Cover 的版本表：之前各版＋這一版（第一次產生寫 First list，改版寫 RD 填的修改內容）
-const curChange = () => state.meta.fromOld ? String(state.meta.change || "").trim() : "First list";
+// Cover 的版本表：之前各版＋這一版（第一次產生寫 Initial release，改版寫 RD 填的修改內容）
+const curChange = () => state.meta.fromOld ? String(state.meta.change || "").trim() : "Initial release";
 const changeRows = () => [...(state.meta.history || []), {rev:state.meta.rev, date:state.meta.date, change:curChange(), rd:state.meta.rd}];
 // 必填沒填的欄位名稱（沒填就不能下載）
 function metaErrs(){
@@ -646,7 +646,7 @@ function renderOverview(){
       <div class="tbl-wrap"><table><thead><tr><th class="nw">Rev</th><th class="nw">Date</th><th>Change List</th><th class="nw">Issue by</th></tr></thead><tbody>
         ${(state.meta.history || []).map(h=>`<tr><td class="nw">${esc(h.rev)}</td><td class="nw">${esc(h.date)}</td><td>${esc(h.change)}</td><td class="nw">${esc(h.rd)}</td></tr>`).join("")}
         <tr><td class="nw"><b>${esc(state.meta.rev)}</b></td><td class="nw">${esc(state.meta.date)}</td>
-          <td>${state.meta.fromOld ? `<input id="m-change" class="chg" placeholder="本次修改內容（必填）" value="${esc(state.meta.change || "")}">` : "First list"}</td>
+          <td>${state.meta.fromOld ? `<input id="m-change" class="chg" placeholder="本次修改內容（必填）" value="${esc(state.meta.change || "")}">` : "Initial release"}</td>
           <td class="nw">${esc(state.meta.rd || "")}</td></tr>
       </tbody></table></div></div>
     ${errs.length?`<div class="step" style="border-color:#f1c2c2"><div class="step-t"><h3 style="color:var(--err)">還有 ${errs.length} 個問題</h3></div><ul class="errlist">${errs.map(e=>`<li>${e}</li>`).join("")}</ul></div>`:""}
@@ -1356,7 +1356,7 @@ function restoreDraft(dr){
   const str = x => String(x ?? "");
   const history = Array.isArray(m.history)
     ? [...m.history.map(h => ({rev:str(h?.rev), date:str(h?.date), change:str(h?.change), rd:str(h?.rd)})),
-       {rev:str(m.rev), date:str(m.date), change:m.fromOld ? str(m.change).trim() : "First list", rd:str(m.rd)}]
+       {rev:str(m.rev), date:str(m.date), change:m.fromOld ? str(m.change).trim() : "Initial release", rd:str(m.rd)}]
     : [];
   st.meta = {project:str(m.project), rd:str(m.rd), rev:nextRev(str(m.rev)), date:today(), history, change:"", fromOld:true};
   return {st, oldRev:String(m.rev ?? "")};
