@@ -1420,9 +1420,20 @@ function legacyDraft(o){
   }
   return {draft:{meta:{project:o.project, rd:o.rd, rev:o.revision, date:o.date}, sec}, notes:[...new Set(notes)]};
 }
-$("b-open").onclick = () => $("f-open").click();
-$("f-open").onchange = async e => {
-  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+// 選檔案：優先用新版選檔視窗（showOpenFilePicker）——公司電腦會擋傳統的選檔按鈕，新版視窗實測可以；
+// 不支援的瀏覽器（Firefox）退回傳統的 <input type=file>
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+async function pickFile(input, desc, accept, handle){
+  if (!window.showOpenFilePicker) return input.click();
+  let f;
+  try { const [h] = await window.showOpenFilePicker({types:[{description:desc, accept}]}); f = await h.getFile(); }
+  catch (err) { if (err.name !== "AbortError") alert("無法選擇檔案：" + err.message); return; }   // 按取消不提示
+  handle(f);
+}
+$("b-open").onclick = () => pickFile($("f-open"), "zip、JSON 或需求表 Excel",
+  {"application/zip":[".zip"], "application/json":[".json"], [XLSX_MIME]:[".xlsx"]}, openFile);
+$("f-open").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) openFile(f); };
+async function openFile(f){
   try {
     const buf = await f.arrayBuffer(), head = new Uint8Array(buf, 0, 2);
     const text = head[0] === 0x50 && head[1] === 0x4b ? await jsonFromZip(buf) : new TextDecoder().decode(buf);
@@ -1444,7 +1455,7 @@ $("f-open").onchange = async e => {
       : skipped.length ? ["以下內容沒有載入：", ...skipped] : null;
     renderNotice();
   } catch (err) { alert("無法開啟：" + err.message); }
-};
+}
 
 /* ---------- 檢查需求表（MT 用）：用 JSON（zip 裡的、或 Excel 裡藏的）重新產生一份需求表，跟 Excel 逐格比對 ---------- */
 // 讀 xlsx 每個工作表的儲存格：{工作表名: {A1: 值}}；Excel 另存過會改用 sharedStrings，一樣讀得到
@@ -1470,9 +1481,10 @@ async function xlsxCells(bytes){
   return {sheets:out, locked};
 }
 const sameNum = (a, b) => a === b || (a !== "" && b !== "" && !isNaN(a) && !isNaN(b) && Math.abs(a - b) < 1e-9);
-$("b-check").onclick = () => $("f-check").click();
-$("f-check").onchange = async e => {
-  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+$("b-check").onclick = () => pickFile($("f-check"), "zip 或需求表 Excel",
+  {"application/zip":[".zip"], [XLSX_MIME]:[".xlsx"]}, checkFile);
+$("f-check").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) checkFile(f); };
+async function checkFile(f){
   try {
     const buf = await f.arrayBuffer(), list = zipList(buf);
     let o, xlBytes;
@@ -1506,7 +1518,7 @@ $("f-check").onchange = async e => {
       ...(unlocked.length ? [`這些工作表的保護被解除過：${unlocked.join("、")}`] : [])];
     renderNotice();
   } catch (err) { alert("無法檢查：" + err.message); }
-};
+}
 
 state = templateState();   // 每次打開都先填好範本
 refreshPages();
