@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>讀檔方式測試</title>
+<style>
+:root{
+  --bg:#f5f6fa; --card:#fff; --ink:#1d2433; --muted:#6b7385; --line:#e3e6ee;
+  --accent:#3b4fd8; --accent-soft:#eceffd; --ok:#1f8a4c; --ok-soft:#e5f5ec;
+  --err:#c62f2f; --err-soft:#fdeaea; --warn:#8a5a00; --warn-soft:#fff3d6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 "Microsoft JhengHei","PingFang TC",system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:28px 16px 60px}
+h1{font-size:22px;margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 6px}
+.safe{display:inline-block;background:var(--ok-soft);color:var(--ok);border-radius:8px;padding:6px 12px;font-weight:600;margin:6px 0 18px}
+.how{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:18px}
+.how ol{margin:6px 0 0;padding-left:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+.card h2{font-size:16px;margin:0 0 2px;display:flex;align-items:center;gap:8px}
+.tag{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;flex:none}
+.card .desc{color:var(--muted);font-size:13px;margin:0 0 10px}
+.btn{font:inherit;font-size:14px;font-weight:600;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:8px;padding:8px 18px;cursor:pointer}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:var(--card);color:var(--accent)}
+.zone{border:2px dashed #b9c0d6;border-radius:10px;padding:26px 12px;text-align:center;color:var(--muted);background:#fafbfe;outline:none}
+.zone.over,.zone:focus{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.res{margin-top:10px;border-radius:8px;padding:8px 12px;font-size:13px;display:none;white-space:pre-wrap;word-break:break-all}
+.res.ok{display:block;background:var(--ok-soft);color:var(--ok)}
+.res.bad{display:block;background:var(--err-soft);color:var(--err)}
+.res.warn{display:block;background:var(--warn-soft);color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.st-ok{color:var(--ok);font-weight:700}.st-bad{color:var(--err);font-weight:700}.st-warn{color:var(--warn);font-weight:700}.st-none{color:var(--muted)}
+.foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.sm{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1 style="margin-bottom:18px">讀檔方式測試</h1>
+
+  <div class="how"><b>測試步驟</b>
+    <ol>
+      <li>準備一個 RF 需求網頁下載的需求表 Excel（.xlsx）或 zip，其他檔案不收。</li>
+      <li>下面 A～D 每一種都試一次。如果被公司軟體跳窗攔截，請記下（或截圖）跳出的訊息。</li>
+    </ol>
+  </div>
+
+  <section class="card" data-m="A">
+    <h2><span class="tag">A</span>選擇檔案按鈕</h2>
+    <p class="desc">跟目前網頁的「開啟舊檔」一樣（對照組）。</p>
+    <button class="btn" id="a-btn">選擇檔案</button>
+    <input type="file" id="a-file" accept=".xlsx,.zip" hidden>
+    <div class="res"></div>
+  </section>
+
+  <section class="card" data-m="B">
+    <h2><span class="tag">B</span>拖曳檔案</h2>
+    <p class="desc">從檔案總管把檔案拖進下面的框框。</p>
+    <div class="zone" id="b-zone">把檔案拖到這裡</div>
+    <div class="res"></div>
+  </section>
+
+  <section class="card" data-m="C">
+    <h2><span class="tag">C</span>複製貼上</h2>
+    <p class="desc">在檔案總管對檔案按 Ctrl+C，再點一下下面的框框，按 Ctrl+V。</p>
+    <div class="zone" id="c-zone" tabindex="0">點這裡，再按 Ctrl+V</div>
+    <div class="res"></div>
+  </section>
+
+  <section class="card" data-m="D">
+    <h2><span class="tag">D</span>新版選檔視窗</h2>
+    <p class="desc">Edge／Chrome 另一種開啟檔案的方式，跟 A 的程式路線不同。</p>
+    <button class="btn" id="d-btn">用新版視窗選擇檔案</button>
+    <div class="res"></div>
+  </section>
+
+  <section class="card">
+    <h2>測試結果</h2>
+    <table><thead><tr><th style="width:150px">方式</th><th style="width:110px">結果</th><th>說明</th></tr></thead><tbody id="sum"></tbody></table>
+    <p class="sm" id="env" style="margin:10px 0 0"></p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const NAMES = {A:"A 選擇檔案按鈕", B:"B 拖曳檔案", C:"C 複製貼上", D:"D 新版選檔視窗"};
+const result = {A:null, B:null, C:null, D:null};   // {st:"ok"|"bad"|"warn", msg}
+const LABEL = {ok:"✓ 成功", bad:"✗ 失敗", warn:"⚠ 讀不到內容"};
+
+// 結果顯示在該方式的區塊下面，並更新最下面的總表
+function show(m, st, msg){
+  result[m] = {st, msg};
+  const box = document.querySelector(`[data-m="${m}"] .res`);
+  box.className = "res " + st; box.textContent = `${LABEL[st]}：${msg}`;
+  renderSum();
+}
+function renderSum(){
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  $("sum").innerHTML = Object.keys(NAMES).map(m => {
+    const r = result[m];
+    return `<tr><td>${NAMES[m]}</td><td class="st-${r ? r.st : "none"}">${r ? LABEL[r.st] : "未測"}</td><td>${r ? esc(r.msg) : ""}</td></tr>`;
+  }).join("");
+}
+const size = n => n < 1024 ? `${n} B` : n < 1048576 ? `${(n/1024).toFixed(1)} KB` : `${(n/1048576).toFixed(2)} MB`;
+
+// zip（xlsx 也是 zip）裡的檔名清單：讀最後面的中央目錄
+function zipNames(u){
+  const v = new DataView(u.buffer, u.byteOffset, u.byteLength), out = [];
+  let e = u.length - 22;
+  while (e >= 0 && v.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) return out;
+  let p = v.getUint32(e + 16, true);
+  for (let n = v.getUint16(e + 10, true); n > 0 && p + 46 <= u.length; n--) {
+    const nl = v.getUint16(p + 28, true), ex = v.getUint16(p + 30, true), cm = v.getUint16(p + 32, true);
+    out.push(new TextDecoder().decode(u.subarray(p + 46, p + 46 + nl)).replace(/^\//, ""));
+    p += 46 + nl + ex + cm;
+  }
+  return out;
+}
+// 真的把內容讀出來，確認不是空的（有些防護軟體不跳窗，只讓內容變空或讀取失敗）
+// 只收 RF 需求網頁下載的檔案類型：需求表 Excel（.xlsx）或 zip
+const WRONG = "請改用 RF 需求網頁下載的需求表 Excel（.xlsx）或 zip，這次不算結果";
+function wrongType(m, msg){   // 檔案類型不對：只提示，不算測試結果
+  result[m] = null;
+  const box = document.querySelector(`[data-m="${m}"] .res`);
+  box.className = "res warn"; box.textContent = `⚠ ${msg}。${WRONG}`;
+  renderSum();
+}
+async function test(m, file){
+  if (!file) return show(m, "bad", "沒有拿到檔案");
+  const ext = (file.name.match(/\.([^.]+)$/) || [, ""])[1].toLowerCase();
+  if (ext !== "xlsx" && ext !== "zip") return wrongType(m, `${file.name} 不是 .xlsx 或 .zip`);
+  try {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    if (!file.size) return show(m, "warn", `${file.name}：檔案是 0 B（本來就是空檔案，或被擋）`);
+    if (!buf.length) return show(m, "warn", `${file.name}：檔案大小 ${size(file.size)}，但讀到的內容是空的（可能被擋）`);
+    if (buf.length !== file.size) return show(m, "warn", `${file.name}：檔案應該有 ${size(file.size)}，只讀到 ${size(buf.length)}（可能被擋）`);
+    // 確認內容真的是 Excel／zip（被擋時有些軟體會把內容換成別的東西）
+    const isZip = buf[0] === 0x50 && buf[1] === 0x4b, names = isZip ? zipNames(buf) : [];
+    const isXlsx = names.includes("xl/workbook.xml");
+    if (!isZip) return show(m, "warn", `${file.name}：讀到的內容不是 ${ext === "xlsx" ? "Excel" : "zip"} 格式（可能被擋或被換掉）`);
+    if (ext === "xlsx" && !isXlsx) return show(m, "warn", `${file.name}：副檔名是 .xlsx，但內容不是 Excel（可能被擋或被換掉）`);
+    // 是不是 RF 需求網頁產生的檔案（需求表 Excel 裡有藏資料；zip 裡有 _RFreq.json）
+    const ours = isXlsx ? names.some(n => /^customXml\/item\d+\.xml$/i.test(n)) : names.some(n => /_RFreq\.json$/.test(n));
+    const kind = isXlsx ? "Excel 檔" : `zip 壓縮檔，裡面 ${names.filter(n => !n.endsWith("/")).length} 個檔案`;
+    show(m, "ok", `${file.name}（${size(file.size)}，${kind}${ours ? "，RF 需求網頁產生的檔案" : ""}），內容完整讀到`);
+  } catch (err) {
+    show(m, "bad", `${file.name}：讀取時出錯 ${err.name}: ${err.message}`);
+  }
+}
+
+// A：選擇檔案按鈕
+$("a-btn").onclick = () => $("a-file").click();
+$("a-file").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) test("A", f); };
+
+// B：拖曳（整頁擋掉預設動作，免得拖歪了瀏覽器直接打開檔案）
+["dragover", "drop"].forEach(t => window.addEventListener(t, e => e.preventDefault()));
+const bz = $("b-zone");
+bz.addEventListener("dragover", e => { e.preventDefault(); bz.classList.add("over"); });
+bz.addEventListener("dragleave", () => bz.classList.remove("over"));
+bz.addEventListener("drop", e => {
+  e.preventDefault(); bz.classList.remove("over");
+  const f = e.dataTransfer?.files?.[0];
+  if (!f) return show("B", "bad", "拖進來了，但沒有拿到檔案（可能被擋）");
+  test("B", f);
+});
+
+// C：複製貼上
+const cz = $("c-zone");
+cz.addEventListener("paste", e => {
+  e.preventDefault();
+  const f = e.clipboardData?.files?.[0];
+  if (f) return test("C", f);
+  const txt = e.clipboardData?.getData("text") || "";
+  show("C", "bad", txt ? `貼上的是文字（${txt.slice(0, 40)}…），不是檔案。請在檔案總管對檔案本身按 Ctrl+C` : "貼上了，但剪貼簿裡沒有檔案（可能被擋，或複製的不是檔案）");
+});
+
+// D：新版選檔視窗（File System Access API）
+$("d-btn").onclick = async () => {
+  if (!window.showOpenFilePicker) return show("D", "bad", "這個瀏覽器不支援新版選檔視窗");
+  try {
+    const [h] = await window.showOpenFilePicker({types:[{description:"需求表 Excel 或 zip", accept:{
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"], "application/zip":[".zip"]}}]});
+    test("D", await h.getFile());
+  } catch (err) {
+    if (err.name === "AbortError") return;   // 自己按取消，不算
+    show("D", "bad", `${err.name}: ${err.message}`);
+  }
+};
+
+// 瀏覽器版本（方便判斷）
+const ua = navigator.userAgent, ver = re => (ua.match(re) || [])[1];
+$("env").textContent = "瀏覽器：" + (ver(/Edg\/([\d.]+)/) ? "Edge " + ver(/Edg\/([\d.]+)/) : ver(/Chrome\/([\d.]+)/) ? "Chrome " + ver(/Chrome\/([\d.]+)/) : ver(/Firefox\/([\d.]+)/) ? "Firefox " + ver(/Firefox\/([\d.]+)/) : "其他");
+renderSum();
+
+</script>
+</body>
+</html>
